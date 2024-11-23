@@ -143,6 +143,7 @@ my_model/
 # ast template
 ast_index_file.py
 
+# add
 AndroidControl/
 androidcontrol_1108/
 docs/
@@ -150,3 +151,6 @@ asset/
 output/
 tests/
 resources/
+.github/
+.dev_scripts/
+tmp/

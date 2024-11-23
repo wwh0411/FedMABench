@@ -1168,6 +1168,8 @@ class SftArguments(ArgumentsBase):
                 self.output_dir = os.path.join(self.output_dir, f'{self.model_type}-tp{self.tp}-pp{self.pp}')
             else:
                 self.output_dir = os.path.join(self.output_dir, self.model_type)
+            # add fed_alg
+
             self.output_dir = add_version_to_work_dir(self.output_dir)
             logger.info(f'output_dir: {self.output_dir}')
             if self.train_backend == 'transformers':

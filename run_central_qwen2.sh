@@ -1,21 +1,21 @@
-CUDA_VISIBLE_DEVICES=6,7 MAX_PIXELS=602112 \
+CUDA_VISIBLE_DEVICES=4,5 MAX_PIXELS=602112 \
   swift sft \
   --round 200 \
   --fed_alg central \
   --client_num 1 \
-  --model_type internvl2-1b \
+  --model_type qwen2-vl-7b-instruct \
   --hub_token 64a4375e-1c35-49e1-a6d7-6cfef6a4c2e0 \
   --lazy_tokenize True \
   --preprocess_num_proc 4 \
-  --dataset /GPFS/data/wenhaowang-1/ms-swift/androidcontrol_1108/unpack-1109-message-vlm-train-6000.jsonl \
+  --dataset /GPFS/data/wenhaowang-1/ms-swift/androidcontrol_1108/unpack-1109-message-vlm-train-60000.jsonl \
   --sft_type lora \
   --tuner_backend peft \
   --dtype AUTO \
   --output_dir output \
-  --train_dataset_sample 6000 \
+  --train_dataset_sample 60000 \
   --dataset_test_ratio 0 \
   --max_steps 300 \
-  --max_length 2048 \
+  --max_length 4096 \
   --check_dataset_strategy warning \
   --lora_rank 8 \
   --lora_alpha 32 \

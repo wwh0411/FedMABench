@@ -28,7 +28,6 @@ logger = get_logger()
 
 import sys
 import random
-from tqdm import tqdm
 sys.setrecursionlimit(10000)
 
 def _get_train_val_dataset(args: SftArguments) -> Tuple[HfDataset, Optional[HfDataset]]:
@@ -418,7 +417,7 @@ def prepare_dataset(args, template: Template, msg: Optional[Dict[str, Any]] = No
         print('dataset_maping cccc....................')
         # td0, tkwargs0 = template.encode(train_dataset[0])
         # print_example(td0, tokenizer, tkwargs0)
-        # train_dataset = LazyLLMDataset(train_dataset, template.encode)
+        train_dataset = LazyLLMDataset(train_dataset, template.encode)
         if val_dataset is not None:
             val_dataset = LazyLLMDataset(val_dataset, template.encode)
     if isinstance(msg, dict):
@@ -621,24 +620,13 @@ def get_clients_this_round(round, num_clients, num_clients_sample):
     clients_this_round = sorted(random.sample(range(num_clients), num_clients_sample))
     return clients_this_round
 
-def get_dataset_this_round(dataset, round, indice, args):
-
-
+def get_dataset_this_round(dataset, round, args):
     num2sample = args.batch_size * args.gradient_accumulation_steps * args.max_steps * torch.cuda.device_count()
     # print(num2sample)
     random.seed(round)
-    # print(type(indice), type(num2sample))
-    random_idx = random.sample(indice, num2sample)
-    # random_idx = indice[round*num2sample:(round+1)*num2sample]
+    random_idx = random.sample(range(0, len(dataset)), num2sample)
     # print(random_idx)
     dataset_this_round = [dataset[x] for x in random_idx]
-
-    # def move_dict_to_cpu(input_dict):
-    #
-    #     return {key: value.cpu() if isinstance(value, torch.Tensor) else value for key, value in input_dict.items()}
-    # for x in dataset_this_round:
-    #     move_dict_to_cpu(x)
-
     # print('The first sample:', dataset_this_round[0])
     return dataset_this_round
 
@@ -670,48 +658,40 @@ def llm_sft(args: SftArguments) -> Dict[str, Any]:
     local_lora_list = [copy.deepcopy(lora_w) for _ in range(args.client_num)]
     train_dataset, val_dataset = prepare_dataset(args, template, msg)
     print('dataset done ^^^^^^')
-    # if args.fed_alg == 'central':
-    #     train_dataset_list = split(train_dataset, 1)
-    # else:
-    #     train_dataset_list = split(train_dataset, args.client_num)
-
-    indices = list(range(len(train_dataset)))
-    split = [indices[i::args.client_num] for i in range(args.client_num)]
-    client_num_samples = [len(x) for x in split]
+    if args.fed_alg == 'central':
+        train_dataset_list = split(train_dataset, 1)
+    else:
+        train_dataset_list = split(train_dataset, args.client_num)
+    client_num_samples = [len(x) for x in train_dataset_list]
     print(client_num_samples)
     print('???')
     for i in range(args.round):
+        online_clients = get_clients_this_round(i, args.client_num, args.client_sample)
         if args.fed_alg.startswith('local'):
             online_clients = [0]
         elif args.fed_alg == 'central':
             online_clients = [0]
-        else:
-            online_clients = get_clients_this_round(i, args.client_num, args.client_sample)
         print('round:', i, online_clients)
         # local train for each client
 
         for j in online_clients:
             print('client:', j)
-            train_dataset_j = get_dataset_this_round(train_dataset, i, split[j], args)
-            train_dataset_j = LazyLLMDataset(train_dataset_j, template.encode)
+            train_dataset = get_dataset_this_round(train_dataset_list[j], i, args)
             local_lora = local_lora_list[j]
 
             # two options
             # local_model = set_peft_model_state_dict(model, local_lora)
             set_peft_model_state_dict(model, global_lora)
             # print(type(local_model))
-            trainer_train(args, model, template, train_dataset_j, val_dataset, callbacks=callbacks, msg=msg)
-            # torch.cuda.empty_cache()
-            # del train_dataset_j
+            trainer_train(args, model, template, train_dataset, val_dataset, callbacks=callbacks, msg=msg)
             local_lora_after = copy.deepcopy(get_peft_model_state_dict(model)) # copy is necessary
             local_lora_list[j] = local_lora_after
         global_lora = aggregate_model(global_lora, local_lora_list, client_num_samples, online_clients)
         set_peft_model_state_dict(model, global_lora)
-        torch.cuda.empty_cache()
+
         # torch.save(global_lora, self.save_dir + '/global_lora_{}.bin'.format(round))
         if (i + 1) % 50 == 0:
             model.save_pretrained(args.output_dir + '/global_lora_{}'.format(i))
-
     return
 
 def get_sft_main(args, llm):

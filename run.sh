@@ -1,15 +1,19 @@
 CUDA_VISIBLE_DEVICES=0,1 swift sft \
   --round 200 \
-  --fed_alg local \
-  --model_type qwen-vl-chat \
+  --fed_alg fedavg \
+  --model_type qwen2-vl-7b-instruct \
   --dataset /GPFS/data/wenhaowang-1/ms-swift/androidcontrol_1108/unpack-1109-message-vlm-train-6000.jsonl \
   --sft_type lora \
   --tuner_backend peft \
   --dtype AUTO \
   --output_dir output \
   --train_dataset_sample 6000 \
+  --dataloader_num_workers 4 \
+  --lazy_tokenize True \
+  --preprocess_num_proc 4 \
+  --streaming False \
   --dataset_test_ratio 0 \
-  --max_steps 10 \
+  --max_steps 100 \
   --max_length 4096 \
   --check_dataset_strategy warning \
   --lora_rank 8 \
