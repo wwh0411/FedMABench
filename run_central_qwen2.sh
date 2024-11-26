@@ -1,4 +1,4 @@
-CUDA_VISIBLE_DEVICES=4,5 MAX_PIXELS=602112 \
+CUDA_VISIBLE_DEVICES=6,7 MAX_PIXELS=602112 \
   swift sft \
   --round 200 \
   --fed_alg central \

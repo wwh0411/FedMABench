@@ -1,4 +1,4 @@
-CUDA_VISIBLE_DEVICES=1,5 MAX_PIXELS=602112 \
+CUDA_VISIBLE_DEVICES=4,5 MAX_PIXELS=602112 \
   swift sft \
   --round 200 \
   --fed_alg fedavg \
@@ -14,7 +14,7 @@ CUDA_VISIBLE_DEVICES=1,5 MAX_PIXELS=602112 \
   --output_dir output \
   --train_dataset_sample 60000 \
   --dataset_test_ratio 0 \
-  --max_steps 10 \
+  --max_steps 100 \
   --max_length 4096 \
   --check_dataset_strategy warning \
   --lora_rank 8 \

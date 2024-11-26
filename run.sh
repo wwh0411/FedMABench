@@ -1,6 +1,7 @@
-CUDA_VISIBLE_DEVICES=0,1 swift sft \
+CUDA_VISIBLE_DEVICES=4,5 MAX_PIXELS=602112 swift sft \
   --round 200 \
   --fed_alg fedavg \
+  --client_num 50 \
   --model_type qwen2-vl-7b-instruct \
   --dataset /GPFS/data/wenhaowang-1/ms-swift/androidcontrol_1108/unpack-1109-message-vlm-train-6000.jsonl \
   --sft_type lora \
@@ -13,7 +14,7 @@ CUDA_VISIBLE_DEVICES=0,1 swift sft \
   --preprocess_num_proc 4 \
   --streaming False \
   --dataset_test_ratio 0 \
-  --max_steps 100 \
+  --max_steps 10 \
   --max_length 4096 \
   --check_dataset_strategy warning \
   --lora_rank 8 \

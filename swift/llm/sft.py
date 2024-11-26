@@ -25,7 +25,8 @@ from .utils import (TEMPLATE_MAPPING, LazyLLMDataset, PtArguments, RLHFArguments
                     get_template, get_time_info, print_example, set_generation_config, sort_by_max_length, stat_dataset)
 
 logger = get_logger()
-
+import logging
+logger.setLevel(logging.CRITICAL)
 import sys
 import random
 from tqdm import tqdm
@@ -630,7 +631,7 @@ def get_dataset_this_round(dataset, round, indice, args):
     # print(type(indice), type(num2sample))
     random_idx = random.sample(indice, num2sample)
     # random_idx = indice[round*num2sample:(round+1)*num2sample]
-    # print(random_idx)
+    print(random_idx)
     dataset_this_round = [dataset[x] for x in random_idx]
 
     # def move_dict_to_cpu(input_dict):
@@ -666,6 +667,10 @@ def llm_sft(args: SftArguments) -> Dict[str, Any]:
     lora_w = get_peft_model_state_dict(model)
     import copy
     global_lora = copy.deepcopy(lora_w)
+    num=3
+
+    # print(global_lora['base_model.model.model.layers.0.self_attn.k_proj.lora_A.weight'][num].tolist()[:5])
+
     # num_train_client = 10
     local_lora_list = [copy.deepcopy(lora_w) for _ in range(args.client_num)]
     train_dataset, val_dataset = prepare_dataset(args, template, msg)
@@ -679,7 +684,6 @@ def llm_sft(args: SftArguments) -> Dict[str, Any]:
     split = [indices[i::args.client_num] for i in range(args.client_num)]
     client_num_samples = [len(x) for x in split]
     print(client_num_samples)
-    print('???')
     for i in range(args.round):
         if args.fed_alg.startswith('local'):
             online_clients = [0]
@@ -705,11 +709,14 @@ def llm_sft(args: SftArguments) -> Dict[str, Any]:
             # del train_dataset_j
             local_lora_after = copy.deepcopy(get_peft_model_state_dict(model)) # copy is necessary
             local_lora_list[j] = local_lora_after
+            # print(local_lora_after['base_model.model.model.layers.27.mlp.down_proj.lora_A.weight'][num].tolist()[:5])
+
         global_lora = aggregate_model(global_lora, local_lora_list, client_num_samples, online_clients)
+        # print(global_lora['base_model.model.model.layers.27.mlp.down_proj.lora_A.weight'][num].tolist()[:5])
         set_peft_model_state_dict(model, global_lora)
         torch.cuda.empty_cache()
         # torch.save(global_lora, self.save_dir + '/global_lora_{}.bin'.format(round))
-        if (i + 1) % 50 == 0:
+        if (i + 1) % 25 == 0:
             model.save_pretrained(args.output_dir + '/global_lora_{}'.format(i))
 
     return
