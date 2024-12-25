@@ -549,15 +549,13 @@ def llm_sft_old(args: SftArguments) -> Dict[str, Any]:
     msg = {}
     model, template, callbacks = prepare_model_template_train(args, msg)
 
-
-
-
     train_dataset, val_dataset = prepare_dataset(args, template, msg)
     train_dataset_list = split(train_dataset, 10)
     print([len(x) for x in train_dataset_list])
     print(type(train_dataset))
 
     return trainer_train(args, model, template, train_dataset, val_dataset, callbacks=callbacks, msg=msg)
+
 
 def split(dataset, num_clients):
 
@@ -586,6 +584,10 @@ def split(dataset, num_clients):
 
     return result
 
+# def split_new(indices, method='iid'):
+#     if method == 'iid':
+#         splits = [indices[i::args.client_num] for i in range(args.client_num)]
+
 
 def aggregate_model(global_lora, local_lora_list, client_num_samples, clients_index_list):
     total_data_points = sum([client_num_samples[r] for r in clients_index_list])
@@ -610,6 +612,7 @@ def aggregate_model(global_lora, local_lora_list, client_num_samples, clients_in
     # print('after_agg', list(global_model.named_parameters())[20])
     return global_lora_new
 
+
 def get_clients_this_round(round, num_clients, num_clients_sample):
     # if (fed_args.fed_alg).startswith('local'):
     #     clients_this_round = [int((fed_args.fed_alg)[-1])]
@@ -622,16 +625,28 @@ def get_clients_this_round(round, num_clients, num_clients_sample):
     clients_this_round = sorted(random.sample(range(num_clients), num_clients_sample))
     return clients_this_round
 
+
+from collections import defaultdict
+def group_by_client_number(data):
+    # 使用 defaultdict 来存储每个 client_number 对应的索引列表
+    result = defaultdict(list)
+
+    # 遍历列表，获取每个元素的索引及其 client_number
+    for idx, item in enumerate(data):
+        client_number = item["client_id"]
+        result[client_number].append(idx)
+    print(result)
+    # 将结果按 client_number 排序并转化为列表形式
+    return [result[i] for i in sorted(result.keys())]
+
+
 def get_dataset_this_round(dataset, round, indice, args):
-
-
     num2sample = args.batch_size * args.gradient_accumulation_steps * args.max_steps * torch.cuda.device_count()
     # print(num2sample)
     random.seed(round)
     # print(type(indice), type(num2sample))
     random_idx = random.sample(indice, num2sample)
     # random_idx = indice[round*num2sample:(round+1)*num2sample]
-    print(random_idx)
     dataset_this_round = [dataset[x] for x in random_idx]
 
     # def move_dict_to_cpu(input_dict):
@@ -667,7 +682,7 @@ def llm_sft(args: SftArguments) -> Dict[str, Any]:
     lora_w = get_peft_model_state_dict(model)
     import copy
     global_lora = copy.deepcopy(lora_w)
-    num=3
+
 
     # print(global_lora['base_model.model.model.layers.0.self_attn.k_proj.lora_A.weight'][num].tolist()[:5])
 
@@ -681,9 +696,24 @@ def llm_sft(args: SftArguments) -> Dict[str, Any]:
     #     train_dataset_list = split(train_dataset, args.client_num)
 
     indices = list(range(len(train_dataset)))
-    split = [indices[i::args.client_num] for i in range(args.client_num)]
+
+    def read_jsonl(path):
+        data = []
+        with open(path, 'r', encoding='utf-8') as file:
+            for line in file:
+                data.append(json.loads(line))
+        return data
+
+    def read_json(path):
+        with open(path, 'r', encoding="utf-8") as f:
+            data = json.load(f)
+        return data
+    dataset_path, dataset_sample = args.dataset[0].split('#')
+    data = read_json(dataset_path)[:int(dataset_sample)]
+    split = group_by_client_number(data)
     client_num_samples = [len(x) for x in split]
     print(client_num_samples)
+    args.client_num = min(args.client_num, len(client_num_samples))
     for i in range(args.round):
         if args.fed_alg.startswith('local'):
             online_clients = [0]
@@ -697,6 +727,7 @@ def llm_sft(args: SftArguments) -> Dict[str, Any]:
         for j in online_clients:
             print('client:', j)
             train_dataset_j = get_dataset_this_round(train_dataset, i, split[j], args)
+            print(train_dataset_j)
             train_dataset_j = LazyLLMDataset(train_dataset_j, template.encode)
             local_lora = local_lora_list[j]
 
