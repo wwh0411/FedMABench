@@ -30,6 +30,10 @@ logger.setLevel(logging.CRITICAL)
 import sys
 import random
 from tqdm import tqdm
+import copy
+import math
+from collections import defaultdict
+from peft import get_peft_model_state_dict, set_peft_model_state_dict
 sys.setrecursionlimit(10000)
 
 def _get_train_val_dataset(args: SftArguments) -> Tuple[HfDataset, Optional[HfDataset]]:
@@ -559,10 +563,6 @@ def llm_sft_old(args: SftArguments) -> Dict[str, Any]:
 
 def split(dataset, num_clients):
 
-    # dataset_shuffle = dataset.shuffle(seed=42)
-    #
-    # dataset_shard_list = [dataset_shuffle.shard(num_shards=num_clients, index=i) for i in range(num_clients)]
-
     print('h*****')
     dataset = list(dataset)
     print('hhh')
@@ -584,19 +584,14 @@ def split(dataset, num_clients):
 
     return result
 
-# def split_new(indices, method='iid'):
-#     if method == 'iid':
-#         splits = [indices[i::args.client_num] for i in range(args.client_num)]
-
 
 def aggregate_model(global_lora, local_lora_list, client_num_samples, clients_index_list):
     total_data_points = sum([client_num_samples[r] for r in clients_index_list])
     fed_avg_freqs = [client_num_samples[r] / total_data_points for r in clients_index_list]
 
     # print(global_lora['base_model.model.model.layers.0.self_attn.q_proj.lora_A.weight'])
-
     # params_dict_new = OrderedDict((name, param.detach()) for name, param in global_model.named_parameters() if 'default' in name)
-    # global_weight = get_peft_model_state_dict(global_model, params_dict_new, 'default')
+
     global_lora_new = global_lora
     for net_id, client_id in enumerate(clients_index_list):
 
@@ -609,24 +604,26 @@ def aggregate_model(global_lora, local_lora_list, client_num_samples, clients_in
             for key in net_para:
                 global_lora_new[key] += net_para[key] * fed_avg_freqs[net_id]
 
-    # print('after_agg', list(global_model.named_parameters())[20])
     return global_lora_new
 
 
-def get_clients_this_round(round, num_clients, num_clients_sample):
-    # if (fed_args.fed_alg).startswith('local'):
-    #     clients_this_round = [int((fed_args.fed_alg)[-1])]
-    # else:
-    #     if fed_args.num_clients < fed_args.sample_clients:
-    #         clients_this_round = list(range(fed_args.num_clients))
-    #     else:
-
-    random.seed(round)
-    clients_this_round = sorted(random.sample(range(num_clients), num_clients_sample))
+def get_clients_this_round(fed_alg, round, num_clients, num_clients_sample):
+    if fed_alg.startswith('local'):
+        try:
+            clients_this_round = [int((fed_alg)[-1])]
+        except:
+            clients_this_round = [0]
+    elif fed_alg in ['fedavg']:
+        if num_clients < num_clients_sample:
+            clients_this_round = list(range(num_clients))
+        else:
+            random.seed(round)
+            clients_this_round = sorted(random.sample(range(num_clients), num_clients_sample))
+    else:
+        clients_this_round = [0]
     return clients_this_round
 
 
-from collections import defaultdict
 def group_by_client_number(data):
     # 使用 defaultdict 来存储每个 client_number 对应的索引列表
     result = defaultdict(list)
@@ -635,31 +632,28 @@ def group_by_client_number(data):
     for idx, item in enumerate(data):
         client_number = item["client_id"]
         result[client_number].append(idx)
-    print(result)
+
     # 将结果按 client_number 排序并转化为列表形式
     return [result[i] for i in sorted(result.keys())]
 
 
 def get_dataset_this_round(dataset, round, indice, args):
-    num2sample = args.batch_size * args.gradient_accumulation_steps * args.max_steps * torch.cuda.device_count()
-    # print(num2sample)
+    if args.max_steps == -1:
+        num2sample = math.ceil(len(indice) / args.round_per_epoch)
+        # max_step = num2sample / (args.batch_size * args.gradient_accumulation_steps * args.max_steps * torch.cuda.device_count())
+    else:
+        num2sample = args.batch_size * args.gradient_accumulation_steps * args.max_steps * torch.cuda.device_count()
+    print('num2sample', num2sample)
     random.seed(round)
-    # print(type(indice), type(num2sample))
     random_idx = random.sample(indice, num2sample)
     # random_idx = indice[round*num2sample:(round+1)*num2sample]
     dataset_this_round = [dataset[x] for x in random_idx]
 
-    # def move_dict_to_cpu(input_dict):
-    #
-    #     return {key: value.cpu() if isinstance(value, torch.Tensor) else value for key, value in input_dict.items()}
-    # for x in dataset_this_round:
-    #     move_dict_to_cpu(x)
-
-    # print('The first sample:', dataset_this_round[0])
     return dataset_this_round
 
+
 # federated learning added by wwh
-def llm_sft(args: SftArguments) -> Dict[str, Any]:
+def llm_sft(args: SftArguments) -> None:
     # logger.info(f'args: {args}')
     seed_everything(args.seed)
 
@@ -675,72 +669,48 @@ def llm_sft(args: SftArguments) -> Dict[str, Any]:
         return llm_sft_megatron(args)
     msg = {}
     model, template, callbacks = prepare_model_template_train(args, msg)
-
-    from peft import get_peft_model_state_dict, set_peft_model_state_dict
-
     # lora param list
     lora_w = get_peft_model_state_dict(model)
-    import copy
     global_lora = copy.deepcopy(lora_w)
 
-
-    # print(global_lora['base_model.model.model.layers.0.self_attn.k_proj.lora_A.weight'][num].tolist()[:5])
-
-    # num_train_client = 10
     local_lora_list = [copy.deepcopy(lora_w) for _ in range(args.client_num)]
     train_dataset, val_dataset = prepare_dataset(args, template, msg)
-    print('dataset done ^^^^^^')
-    # if args.fed_alg == 'central':
-    #     train_dataset_list = split(train_dataset, 1)
-    # else:
-    #     train_dataset_list = split(train_dataset, args.client_num)
 
+    # get client splits
     indices = list(range(len(train_dataset)))
-
-    def read_jsonl(path):
-        data = []
-        with open(path, 'r', encoding='utf-8') as file:
-            for line in file:
-                data.append(json.loads(line))
-        return data
-
     def read_json(path):
         with open(path, 'r', encoding="utf-8") as f:
             data = json.load(f)
         return data
-    dataset_path, dataset_sample = args.dataset[0].split('#')
+
+    if '#' in args.dataset[0]:
+        dataset_path, dataset_sample = args.dataset[0].split('#')
+    else:
+        dataset_path, dataset_sample = args.dataset[0], len(train_dataset)
+    print(dataset_path, dataset_sample)
     data = read_json(dataset_path)[:int(dataset_sample)]
-    split = group_by_client_number(data)
-    client_num_samples = [len(x) for x in split]
+    splits = group_by_client_number(data)
+    client_num_samples = [len(x) for x in splits]
     print(client_num_samples)
-    args.client_num = min(args.client_num, len(client_num_samples))
+
+    # training
     for i in range(args.round):
-        if args.fed_alg.startswith('local'):
-            online_clients = [0]
-        elif args.fed_alg == 'central':
-            online_clients = [0]
-        else:
-            online_clients = get_clients_this_round(i, args.client_num, args.client_sample)
+        online_clients = get_clients_this_round(args.fed_alg, i, args.client_num, args.client_sample)
         print('round:', i, online_clients)
         # local train for each client
 
         for j in online_clients:
             print('client:', j)
-            train_dataset_j = get_dataset_this_round(train_dataset, i, split[j], args)
-            print(train_dataset_j)
+            train_dataset_j = get_dataset_this_round(train_dataset, i, splits[j], args)
             train_dataset_j = LazyLLMDataset(train_dataset_j, template.encode)
             local_lora = local_lora_list[j]
-
             # two options
             # local_model = set_peft_model_state_dict(model, local_lora)
             set_peft_model_state_dict(model, global_lora)
-            # print(type(local_model))
             trainer_train(args, model, template, train_dataset_j, val_dataset, callbacks=callbacks, msg=msg)
             # torch.cuda.empty_cache()
-            # del train_dataset_j
             local_lora_after = copy.deepcopy(get_peft_model_state_dict(model)) # copy is necessary
             local_lora_list[j] = local_lora_after
-            # print(local_lora_after['base_model.model.model.layers.27.mlp.down_proj.lora_A.weight'][num].tolist()[:5])
 
         global_lora = aggregate_model(global_lora, local_lora_list, client_num_samples, online_clients)
         # print(global_lora['base_model.model.model.layers.27.mlp.down_proj.lora_A.weight'][num].tolist()[:5])
@@ -751,6 +721,7 @@ def llm_sft(args: SftArguments) -> Dict[str, Any]:
             model.save_pretrained(args.output_dir + '/global_lora_{}'.format(i))
 
     return
+
 
 def get_sft_main(args, llm):
     if use_torchacc():

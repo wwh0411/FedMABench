@@ -3,12 +3,14 @@
 base_path=/ailab/user/wangwenhao/FedMobile/output
 model=qwen2-vl-7b-instruct
 model_id_or_path=/ailab/user/wangwenhao/.cache/modelscope/hub/qwen/Qwen2-VL-7B-Instruct
-round=149
-val_dataset=/ailab/user/wangwenhao/ms-swift-main/output/gt_val_200_v1.json
+round=49
+val_dataset=/ailab/user/wangwenhao/ms-swift/output/gt_val_200_v1.json
 peft_list=(
-  v7-20241219-094924
-  v8-20241219-094924
-  v9-20241219-094924
+#  v7-20241219-094924
+#  v8-20241219-094924
+#  v9-20241219-094924
+  v12-20241224-184129
+  v13-20241224-184129
 )
 
 for i in ${peft_list[@]};
