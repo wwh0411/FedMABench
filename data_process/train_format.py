@@ -57,7 +57,7 @@ if __name__ == '__main__':
                 elif hete_type == 'category':
                     arg = 2
                 elif hete_type == 'dirichlet':
-                    arg = '0.50'
+                    arg = '0.5'
                 else:
                     arg = 0
                 for train_val in train_val_choices:

@@ -1,10 +1,11 @@
-CUDA_VISIBLE_DEVICES=6,7 MAX_PIXELS=602112 \
+CUDA_VISIBLE_DEVICES=$2 MAX_PIXELS=602112 \
   swift sft \
-  --round 100 \
+  --round 30 \
+  --round_per_epoch 10 \
   --fed_alg central \
   --client_num 1 \
-  --model_type internvl2-8b \
-  --model_id_or_path /ailab/user/wangwenhao/.cache/modelscope/hub/OpenGVLab/InternVL2-8B \
+  --model_type internvl2-2b \
+  --model_id_or_path /ailab/user/wangwenhao/.cache/modelscope/hub/OpenGVLab/InternVL2-2B \
   --lazy_tokenize True \
   --preprocess_num_proc 4 \
   --dataset $1 \
@@ -12,10 +13,10 @@ CUDA_VISIBLE_DEVICES=6,7 MAX_PIXELS=602112 \
   --tuner_backend peft \
   --dtype AUTO \
   --output_dir output \
-  --train_dataset_sample 60000 \
+  --train_dataset_sample -1 \
   --dataset_test_ratio 0 \
-  --max_steps 300 \
-  --max_length 4096 \
+  --max_steps -1 \
+  --max_length 2048 \
   --check_dataset_strategy warning \
   --lora_rank 8 \
   --lora_alpha 32 \

@@ -154,3 +154,4 @@ resources/
 .github/
 .dev_scripts/
 tmp/
+data_process/output/

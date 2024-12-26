@@ -562,10 +562,6 @@ def llm_sft_old(args: SftArguments) -> Dict[str, Any]:
 
 
 def split(dataset, num_clients):
-
-    print('h*****')
-    dataset = list(dataset)
-    print('hhh')
     length = len(dataset)
     part_size = length // num_clients  # 每份的基础大小
     remainder = length % num_clients  # 多出的元素数
@@ -577,9 +573,7 @@ def split(dataset, num_clients):
     for i in tqdm(range(num_clients)):
         # 计算当前份的结束位置
         end = start + part_size + (1 if i < remainder else 0)
-        # 将当前份添加到结果列表
-        result.append(dataset[start:end])
-        # 更新下一个开始位置
+        result.append(list(range(start, end)))
         start = end
 
     return result
@@ -629,6 +623,7 @@ def group_by_client_number(data):
     result = defaultdict(list)
 
     # 遍历列表，获取每个元素的索引及其 client_number
+
     for idx, item in enumerate(data):
         client_number = item["client_id"]
         result[client_number].append(idx)
@@ -689,7 +684,10 @@ def llm_sft(args: SftArguments) -> None:
         dataset_path, dataset_sample = args.dataset[0], len(train_dataset)
     print(dataset_path, dataset_sample)
     data = read_json(dataset_path)[:int(dataset_sample)]
-    splits = group_by_client_number(data)
+    if 'client_id' in data[0].keys():
+        splits = group_by_client_number(data)
+    else:
+        splits = split(data, args.client_num)
     client_num_samples = [len(x) for x in splits]
     print(client_num_samples)
 
@@ -703,6 +701,7 @@ def llm_sft(args: SftArguments) -> None:
             print('client:', j)
             train_dataset_j = get_dataset_this_round(train_dataset, i, splits[j], args)
             train_dataset_j = LazyLLMDataset(train_dataset_j, template.encode)
+            print(len(train_dataset_j))
             local_lora = local_lora_list[j]
             # two options
             # local_model = set_peft_model_state_dict(model, local_lora)
@@ -717,8 +716,8 @@ def llm_sft(args: SftArguments) -> None:
         set_peft_model_state_dict(model, global_lora)
         torch.cuda.empty_cache()
         # torch.save(global_lora, self.save_dir + '/global_lora_{}.bin'.format(round))
-        if (i + 1) % 25 == 0:
-            model.save_pretrained(args.output_dir + '/global_lora_{}'.format(i))
+        if (i + 1) % 5 == 0:
+            model.save_pretrained(args.output_dir + '/global_lora_{}'.format(i+1))
 
     return
 

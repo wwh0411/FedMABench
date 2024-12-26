@@ -1,6 +1,8 @@
 import os
 from tqdm import tqdm
 import json
+from eval_gpt import calculate_tfidf
+import argparse
 
 def read_jsonl(path):
     data = []
@@ -9,8 +11,12 @@ def read_jsonl(path):
             data.append(json.loads(line))
     return data
 
+
 def judge_step(a, b):
-    return 1
+    if calculate_tfidf(a, b) > 0.6:
+        return 1
+    else:
+        return 0
 
 
 def calculate_step_accuracy(data):
@@ -18,15 +24,15 @@ def calculate_step_accuracy(data):
     计算每一行的准确率，判断每一行的 label 和 response 是否一致。
     返回每行的准确性列表 [1, 0, 1, ...]。
     """
-    line_accuracies = []
+    step_accuracies = []
     for item in data:
         # 如果 label 和 response 相同，认为是相关的
-        line_accuracies.append(judge_step(item['label'], item['response']))
+        step_accuracies.append(judge_step(item['label'], item['response']))
 
-    return line_accuracies
+    return step_accuracies
 
 
-def calculate_episode_accuracy(data):
+def calculate_episode_accuracy(data, step_accuracies=None):
     """
     按照 query 对数据进行分组，然后计算每个 episode 的准确率。
     如果一个 episode 中所有行的 label 和 response 都相同，准确率为 1，否则为 0。
@@ -44,7 +50,7 @@ def calculate_episode_accuracy(data):
     # 对每个 episode 检查所有行是否相关
     for query, episode_items in episodes.items():
         # 如果 episode 中所有行的准确性都为 1，则认为该 episode 的准确率为 1
-        if all(item['label'] == item['response'] for item in episode_items):
+        if all(judge_step(item['label'], item['response']) for item in episode_items):
             episode_accuracies.append(1)
         else:
             episode_accuracies.append(0)
@@ -52,9 +58,9 @@ def calculate_episode_accuracy(data):
     return episode_accuracies
 
 
-def main():
+def test_main(data_path):
     # 读取数据
-    data_path = r'/ailab/user/wangwenhao/FedMobile/output/qwen2-vl-7b-instruct/v7-20241219-094924/global_lora_49/infer_result/20241220-001128.jsonl'
+    # data_path = r'/ailab/user/wangwenhao/FedMobile/output/qwen2-vl-7b-instruct/v7-20241219-094924/global_lora_49/infer_result/20241220-001128.jsonl'
     data = read_jsonl(data_path)
     
     # 获取数据所在目录和文件名
@@ -65,15 +71,21 @@ def main():
     # 打开文件保存输出
 
     # 计算每一行的准确率
-    line_accuracies = calculate_step_accuracy(data)
-    line_accuracy = sum(line_accuracies) / len(line_accuracies)
-    print(f"Line-level accuracy: {line_accuracy:.4f}")
+    step_accuracies = calculate_step_accuracy(data)
+    step_accuracy = sum(step_accuracies) / len(step_accuracies)
+    print(f"Step-level accuracy: {step_accuracy * 100:.2f}%")
 
     # 计算按 query 分组的 episode 准确率
     episode_accuracies = calculate_episode_accuracy(data)
     episode_accuracy = sum(episode_accuracies) / len(episode_accuracies)
-    print(f"Episode-level accuracy: {episode_accuracy:.4f}")
+    print(f"Episode-level accuracy: {episode_accuracy * 100:.2f}")
 
 
-if __name__ == '__main__':
-    main()
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--data_path", type=str, default="")
+    # parser.add_argument("--save_failed_generation", action='store_true', default=False)
+
+    args = parser.parse_args()
+
+    test_main(args.data_path)

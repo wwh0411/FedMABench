@@ -3,14 +3,18 @@
 base_path=/ailab/user/wangwenhao/FedMobile/output
 model=qwen2-vl-7b-instruct
 model_id_or_path=/ailab/user/wangwenhao/.cache/modelscope/hub/qwen/Qwen2-VL-7B-Instruct
-round=49
+#model=internvl2-8b
+#model_id_or_path=/ailab/user/wangwenhao/.cache/modelscope/hub/OpenGVLab/InternVL2-8B
+round=99
 val_dataset=/ailab/user/wangwenhao/ms-swift/output/gt_val_200_v1.json
 peft_list=(
-#  v7-20241219-094924
-#  v8-20241219-094924
-#  v9-20241219-094924
-  v12-20241224-184129
-  v13-20241224-184129
+#  v2-20241224-222604
+#  v3-20241224-222604
+  v7-20241219-094924
+  v8-20241219-094924
+  v9-20241219-094924
+#  v12-20241224-184129
+#  v13-20241224-184129
 )
 
 for i in ${peft_list[@]};
@@ -38,7 +42,7 @@ do
     # Process each jsonl file here
     echo $jsonl_file
 #    cd evaluation
-    python eval_acc.py --data_path "$jsonl_file"
+    python test_swift.py --data_path "$jsonl_file"
     done
 
 

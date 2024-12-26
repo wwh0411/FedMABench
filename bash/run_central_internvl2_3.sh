@@ -1,14 +1,14 @@
-CUDA_VISIBLE_DEVICES=4,5 MAX_PIXELS=602112 \
+CUDA_VISIBLE_DEVICES=$2 MAX_PIXELS=602112 \
   swift sft \
   --round 30 \
-  --fed_alg fedavg \
-  --client_num 10 \
-  --model_type qwen2-vl-7b-instruct \
-  --model_id_or_path /ailab/user/wangwenhao/.cache/modelscope/hub/qwen/Qwen2-VL-7B-Instruct \
-  --check_model_is_latest False \
+  --round_per_epoch 10 \
+  --fed_alg central \
+  --client_num 1 \
+  --model_type internvl2-1b \
+  --model_id_or_path /ailab/user/wangwenhao/.cache/modelscope/hub/OpenGVLab/InternVL2-1B \
   --lazy_tokenize True \
   --preprocess_num_proc 4 \
-  --dataset /ailab/user/wangwenhao/FedMobile/data_process/output/high/c10_n5000_train_category_x2.jsonl \
+  --dataset $1 \
   --sft_type lora \
   --tuner_backend peft \
   --dtype AUTO \
@@ -16,7 +16,7 @@ CUDA_VISIBLE_DEVICES=4,5 MAX_PIXELS=602112 \
   --train_dataset_sample -1 \
   --dataset_test_ratio 0 \
   --max_steps -1 \
-  --max_length 4096 \
+  --max_length 2048 \
   --check_dataset_strategy warning \
   --lora_rank 8 \
   --lora_alpha 32 \

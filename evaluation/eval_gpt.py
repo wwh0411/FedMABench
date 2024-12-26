@@ -96,7 +96,7 @@ def extract_ins(query):
 
 def eval_main(path, method):
     ins_list = load_json(path)
-    gt_list = load_json('/ailab/user/wangwenhao/ms-swift-main/output/gt_train_5000_v1.json')
+    gt_list = load_json('/ailab/user/wangwenhao/ms-swift/output/high/gt_train_5000_v1.json')
     sim_list = []
     for ins, gt_ins in tqdm(zip(ins_list, gt_list)):
         ins['pre'] = extract_ins(ins['query'])
@@ -120,7 +120,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     # 设置默认目录路径
     parser.add_argument(
-        '--data_dir',
+        '--data_path',
         type=str,
         default='',
         help='The directory of the data to process. Default: "%(default)s"'
@@ -130,6 +130,6 @@ if __name__ == '__main__':
     if args.choice == 'all':
         for method in ['tfidf', 'rouge', 'bleu']:
             print(method)
-            eval_main(args.data_dir, method)
+            eval_main(args.data_path, method)
     else:
-        eval_main(args.data_dir, args.choice)
+        eval_main(args.data_path, args.choice)
