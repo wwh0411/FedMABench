@@ -684,7 +684,7 @@ def llm_sft(args: SftArguments) -> None:
         dataset_path, dataset_sample = args.dataset[0], len(train_dataset)
     print(dataset_path, dataset_sample)
     data = read_json(dataset_path)[:int(dataset_sample)]
-    if 'client_id' in data[0].keys():
+    if 'client_id' in data[0].keys() and args.fed_alg != 'central':
         splits = group_by_client_number(data)
     else:
         splits = split(data, args.client_num)
