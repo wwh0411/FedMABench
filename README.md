@@ -12,7 +12,7 @@ FedMABench includes the following key features:
 - 10+ **base models** covering *Qwen2-VL-2B/7B-Instruct*, *InternVL2-1B/2B/4B/8B*, *DeepseekVL2* and more.
 
 
-![intro](FedMABench_Overview.pdf)
+![intro](FedMABench.png)
 
 This benchmark is based upon [ms-swift](https://github.com/modelscope/ms-swift/).
 We thank the authors for their valuable contributions!
