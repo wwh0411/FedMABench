@@ -2,10 +2,11 @@ CUDA_VISIBLE_DEVICES=$2 MAX_PIXELS=602112 \
   swift sft \
   --round 30 \
   --round_per_epoch 10 \
-  --fed_alg central \
-  --client_num 1 \
+  --fed_alg local \
+  --client_num 10 \
   --model_type internvl2-2b \
   --model_id_or_path /ailab/user/wangwenhao/.cache/modelscope/hub/OpenGVLab/InternVL2-2B \
+  --check_model_is_latest False \
   --lazy_tokenize True \
   --preprocess_num_proc 4 \
   --dataset $1 \
@@ -31,5 +32,6 @@ CUDA_VISIBLE_DEVICES=$2 MAX_PIXELS=602112 \
   --eval_strategy no \
   --save_strategy no \
   --logging_steps 100
-
+#  --output_dir $3 \
+#  --add_output_dir_suffix False \
 #  --custom_train_dataset_path /GPFS/data/wenhaowang-1/ms-swift/androidcontrol_1108/unpack-1109-test-message-vlm-train.jsonl \

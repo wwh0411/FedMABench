@@ -2,10 +2,11 @@ CUDA_VISIBLE_DEVICES=$2 MAX_PIXELS=602112 \
   swift sft \
   --round 30 \
   --round_per_epoch 10 \
-  --fed_alg central \
-  --client_num 1 \
-  --model_type internvl2-2b \
-  --model_id_or_path /ailab/user/wangwenhao/.cache/modelscope/hub/OpenGVLab/InternVL2-2B \
+  --fed_alg fedavg \
+  --client_num 5 \
+  --client_sample 3 \
+  --model_type internvl2-8b \
+  --model_id_or_path /ailab/user/wangwenhao/.cache/modelscope/hub/OpenGVLab/InternVL2-8B \
   --lazy_tokenize True \
   --preprocess_num_proc 4 \
   --dataset $1 \

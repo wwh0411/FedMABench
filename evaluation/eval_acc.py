@@ -1,35 +1,9 @@
 import os
 from tqdm import tqdm
 import json
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
-import numpy as np
+
 import argparse
 
-def calculate_similarity(text1, text2):
-    """
-    计算两个文本的相似度。
-
-    :param text1: 第一个文本字符串。
-    :param text2: 第二个文本字符串。
-    :return: 两个文本的相似度分数。
-    """
-
-    # 使用TF-IDF转换文本
-    vectorizer = TfidfVectorizer()
-    tfidf_matrix = vectorizer.fit_transform([text1, text2])
-
-    # 计算余弦相似度
-    cosine_sim = cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:2])
-
-    return cosine_sim[0][0]
-
-def read_jsonl(path):
-    data = []
-    with open(path, 'r', encoding='utf-8') as file:
-        for line in file:
-            data.append(json.loads(line))
-    return data
 
 
 def test_main(args):

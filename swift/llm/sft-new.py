@@ -28,7 +28,7 @@ from .utils import (TEMPLATE_MAPPING, LazyLLMDataset, PtArguments, RLHFArguments
 logger = get_logger()
 import logging
 
-# logger.setLevel(logging.CRITICAL)
+logger.setLevel(logging.CRITICAL)
 import sys
 import random
 from tqdm import tqdm
@@ -108,7 +108,7 @@ class SCAFFOLD_Callback(TrainerCallback):
 
 
 def get_auxiliary_dict(fed_args, global_dict):
-    if fed_args.fed_alg == 'scaffold':
+    if fed_args.means == 'scaffold':
         global_auxiliary = {}  # c in SCAFFOLD
         for key in global_dict.keys():
             global_auxiliary[key] = torch.zeros_like(global_dict[key])
@@ -525,6 +525,7 @@ def trainer_train(
         train_dataset,
         val_dataset,
         global_lora,
+        means,
         prox_mu=0.2,
         local_auxiliary=None,
         global_auxiliary=None,
@@ -572,7 +573,7 @@ def trainer_train(
         trainer_kwargs['reward_model'] = reward_model
         trainer_kwargs['value_model'] = value_model
 
-    if args.fed_alg == 'prox':
+    if means == 'prox':
         trainer = TrainerFedProx(
             model=model,
             args=training_args,
@@ -584,7 +585,7 @@ def trainer_train(
             global_lora=global_lora,
             prox_mu=prox_mu,
             **trainer_kwargs)
-    elif args.fed_alg == 'scaffold':
+    elif means == 'scaffold':
         trainer = TrainerSCAFFOLD(
             model=model,
             args=training_args,
@@ -625,8 +626,8 @@ def trainer_train(
     with template.training_context():
         trainer.train(training_args.resume_from_checkpoint)
     last_model_checkpoint = getattr(trainer.state, 'last_model_checkpoint', None)
-    # logger.info(f'last_model_checkpoint: {last_model_checkpoint}')
-    # logger.info(f'best_model_checkpoint: {trainer.state.best_model_checkpoint}')
+    logger.info(f'last_model_checkpoint: {last_model_checkpoint}')
+    logger.info(f'best_model_checkpoint: {trainer.state.best_model_checkpoint}')
     # Visualization
     if is_master() and not use_torchacc():
         if 'tensorboard' in training_args.report_to:
@@ -705,15 +706,14 @@ def get_clients_this_round(fed_alg, round, num_clients, num_clients_sample):
             clients_this_round = [int((fed_alg)[-1])]
         except:
             clients_this_round = [0]
-    elif fed_alg in ['central']:
-        clients_this_round = [0]
-
-    else:
+    elif fed_alg in ['fedavg']:
         if num_clients < num_clients_sample:
             clients_this_round = list(range(num_clients))
         else:
             random.seed(round)
             clients_this_round = sorted(random.sample(range(num_clients), num_clients_sample))
+    else:
+        clients_this_round = [0]
     return clients_this_round
 
 
@@ -800,9 +800,6 @@ def llm_sft(args: SftArguments) -> None:
     global_lora = copy.deepcopy(lora_w)
 
     local_lora_list = [copy.deepcopy(lora_w) for _ in range(args.client_num)]
-    global_auxiliary, auxiliary_model_list, auxiliary_delta_dict = get_auxiliary_dict(args, global_lora)
-    print('len auxiliary_model_list:', len(auxiliary_model_list))
-
     train_dataset, val_dataset = prepare_dataset(args, template, msg)
 
     # Get client splits
@@ -825,10 +822,10 @@ def llm_sft(args: SftArguments) -> None:
     else:
         splits = split(data, args.client_num)
 
-    if args.fed_alg == 'avg-epi':
+    if args.means == 'avg-epi':
         splits2 = group_by_client_number_2(data)
         client_num_samples = [len(x) for x in splits2]
-    elif args.fed_alg == 'ours':
+    elif args.means == 'ours':
         client_num_sample1 = [len(x) for x in splits]
         splits2 = group_by_client_number_2(data)
         client_num_samples2 = [len(x) for x in splits2]
@@ -838,15 +835,13 @@ def llm_sft(args: SftArguments) -> None:
         client_num_samples = [len(x) for x in splits]
     print(client_num_samples)
 
-
+    previous_global_lora = copy.deepcopy(global_lora)
 
     # Training Loop
     for i in range(args.round):
         online_clients = get_clients_this_round(args.fed_alg, i, args.client_num, args.client_sample)
         print('round:', i, online_clients)
-
-        previous_global_lora = copy.deepcopy(global_lora)
-
+        global_auxiliary, auxiliary_model_list, auxiliary_delta_dict = get_auxiliary_dict(SftArguments, global_lora)
         # Local train for each client
         for j in online_clients:
             print('client:', j)
@@ -855,15 +850,28 @@ def llm_sft(args: SftArguments) -> None:
             print(len(train_dataset_j))
             local_lora = local_lora_list[j]
             set_peft_model_state_dict(model, global_lora)
+            # if args.means == 'avgm':
+            #     trainer = TrainerSCAFFOLD(
+            #     model=model,
+            #     args=training_args,
+            #     data_collator=data_collator,
+            #     train_dataset=train_dataset,
+            #     eval_dataset=val_dataset,
+            #     tokenizer=tokenizer,
+            #     callbacks=callbacks,
+            #     global_state=global_lora,
+            #     local_auxiliary=local_auxiliary,
+            #     global_auxiliary=global_auxiliary,
+            #     **trainer_kwargs)
+            #     trainer_train(args, model, template, train_dataset_j, val_dataset, global_lora, args.means, callbacks=callbacks, msg=msg)
 
-            print('len auxiliary_model_list2:', len(auxiliary_model_list))
-            trainer_train(args, model, template, train_dataset_j, val_dataset, global_lora,
+            trainer_train(args, model, template, train_dataset_j, val_dataset, global_lora, args.means,
                           local_auxiliary=auxiliary_model_list[j], global_auxiliary=global_auxiliary,
                           callbacks=callbacks, msg=msg)
             local_lora_after = copy.deepcopy(get_peft_model_state_dict(model))  # Copy is necessary
             local_lora_list[j] = local_lora_after
 
-        if args.fed_alg == 'fedadam':
+        if args.means == 'yogi':
             # FedYogi Update
             global_lora_new = aggregate_model(global_lora, local_lora_list, client_num_samples, online_clients)
             # Initialize proxy dicts for momentum and variance
@@ -876,45 +884,7 @@ def llm_sft(args: SftArguments) -> None:
             fedopt_eta = 1e-3
             fedopt_tau = 1e-6
             for key in global_lora_new:
-                delta_w = global_lora_new[key] - previous_global_lora[key]
-                print(delta_w)
-                proxy_dict[key] = fedopt_beta1 * proxy_dict[key] + (1 - fedopt_beta1) * delta_w if i > 0 else delta_w
-                opt_proxy_dict[key] = fedopt_beta2 * opt_proxy_dict[key] + (1 - fedopt_beta2) * torch.square(
-                    proxy_dict[key])
-                global_lora[key] += fedopt_eta * torch.div(proxy_dict[key],
-                                                           torch.sqrt(opt_proxy_dict[key]) + fedopt_tau)
-        elif args.fed_alg == 'adagrad':
-            # FedYogi Update
-            global_lora_new = aggregate_model(global_lora, local_lora_list, client_num_samples, online_clients)
-            # Initialize proxy dicts for momentum and variance
-            proxy_dict = {key: torch.zeros_like(value) for key, value in global_lora.items()}
-            opt_proxy_dict = {key: torch.zeros_like(value) for key, value in global_lora.items()}
-
-            # FedYogi Update
-            fedopt_beta1 = 0.9
-            fedopt_beta2 = 0.999
-            fedopt_eta = 1e-3
-            fedopt_tau = 1e-6
-            for key in global_lora_new:
-                delta_w = global_lora_new[key] - previous_global_lora[key]
-                proxy_dict[key] = delta_w
-                opt_proxy_dict[key] = opt_proxy_dict[key] + torch.square(proxy_dict[key])
-                global_lora[key] += fedopt_eta * torch.div(proxy_dict[key],
-                                                           torch.sqrt(opt_proxy_dict[key]) + fedopt_tau)
-        elif args.fed_alg == 'fedyogi':
-            # FedYogi Update
-            global_lora_new = aggregate_model(global_lora, local_lora_list, client_num_samples, online_clients)
-            # Initialize proxy dicts for momentum and variance
-            proxy_dict = {key: torch.zeros_like(value) for key, value in global_lora.items()}
-            opt_proxy_dict = {key: torch.zeros_like(value) for key, value in global_lora.items()}
-
-            # FedYogi Update
-            fedopt_beta1 = 0.9
-            fedopt_beta2 = 0.999
-            fedopt_eta = 1e-3
-            fedopt_tau = 1e-6
-            for key in global_lora_new:
-                delta_w = global_lora_new[key] - previous_global_lora[key]
+                delta_w = global_lora_new[key] - global_lora[key]
                 proxy_dict[key] = fedopt_beta1 * proxy_dict[key] + (1 - fedopt_beta1) * delta_w if i > 0 else delta_w
                 delta_square = torch.square(proxy_dict[key])
                 opt_proxy_dict[key] = opt_proxy_dict[key] - (1 - fedopt_beta2) * delta_square * torch.sign(
@@ -922,22 +892,23 @@ def llm_sft(args: SftArguments) -> None:
                 global_lora[key] += fedopt_eta * torch.div(proxy_dict[key],
                                                            torch.sqrt(opt_proxy_dict[key]) + fedopt_tau)
 
-        elif args.fed_alg == 'fedavgm':
+
+        elif args.means == 'avgm':
             # Federated Averaging with Momentum
             global_lora_new = aggregate_model(previous_global_lora, local_lora_list, client_num_samples, online_clients)
             global_lora = {key: 0.9 * previous_global_lora[key] + 0.1 * global_lora_new[key] for key in global_lora_new}
-            # previous_global_lora = copy.deepcopy(global_lora)
+            previous_global_lora = copy.deepcopy(global_lora)
         else:
             # Standard Federated Averaging
             global_lora = aggregate_model(global_lora, local_lora_list, client_num_samples, online_clients)
 
-        if args.fed_alg == 'scaffold':
+        if args.means == 'scaffold':
 
             auxiliary_info = (global_auxiliary, auxiliary_delta_dict)
             global_auxiliary, auxiliary_delta_dict = auxiliary_info
             for key in global_auxiliary.keys():
-                delta_auxiliary = sum([auxiliary_delta_dict[client][key] for client in online_clients])
-                global_auxiliary[key] += delta_auxiliary / args.client_num
+                delta_auxiliary = sum([auxiliary_delta_dict[client][key] for client in clients_this_round])
+                global_auxiliary[key] += delta_auxiliary / fed_args.num_clients
 
         set_peft_model_state_dict(model, global_lora)
         torch.cuda.empty_cache()

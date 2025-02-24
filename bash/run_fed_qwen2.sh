@@ -1,20 +1,22 @@
-CUDA_VISIBLE_DEVICES=4,5 MAX_PIXELS=602112 \
+CUDA_VISIBLE_DEVICES=$2 MAX_PIXELS=602112 \
   swift sft \
-  --round 200 \
-  --fed_alg fedavg \
-  --client_num 10 \
+  --round 30 \
+  --fed_alg fedavg\
+  --client_num 30 \
+  --client_sample 5 \
   --model_type qwen2-vl-7b-instruct \
-  --hub_token 64a4375e-1c35-49e1-a6d7-6cfef6a4c2e0 \
+  --model_id_or_path /ailab/user/wangwenhao/.cache/modelscope/hub/qwen/Qwen2-VL-7B-Instruct \
+  --check_model_is_latest False \
   --lazy_tokenize True \
   --preprocess_num_proc 4 \
-  --dataset /GPFS/data/wenhaowang-1/ms-swift/androidcontrol_1108/unpack-1109-message-vlm-train-60000.jsonl \
+  --dataset $1 \
   --sft_type lora \
   --tuner_backend peft \
   --dtype AUTO \
   --output_dir output \
-  --train_dataset_sample 60000 \
+  --train_dataset_sample -1 \
   --dataset_test_ratio 0 \
-  --max_steps 100 \
+  --max_steps -1 \
   --max_length 4096 \
   --check_dataset_strategy warning \
   --lora_rank 8 \
@@ -31,4 +33,7 @@ CUDA_VISIBLE_DEVICES=4,5 MAX_PIXELS=602112 \
   --save_strategy no \
   --logging_steps 100
 
+
+#  --output_dir $3 \
+#  --add_output_dir_suffix False \
 #  --custom_train_dataset_path /GPFS/data/wenhaowang-1/ms-swift/androidcontrol_1108/unpack-1109-test-message-vlm-train.jsonl \

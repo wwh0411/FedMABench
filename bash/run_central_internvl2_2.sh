@@ -1,6 +1,7 @@
-CUDA_VISIBLE_DEVICES=4,5 MAX_PIXELS=602112 \
+CUDA_VISIBLE_DEVICES=$2 MAX_PIXELS=602112 \
   swift sft \
-  --round 100 \
+  --round 30 \
+  --round_per_epoch 10 \
   --fed_alg central \
   --client_num 1 \
   --model_type internvl2-8b \
@@ -12,9 +13,9 @@ CUDA_VISIBLE_DEVICES=4,5 MAX_PIXELS=602112 \
   --tuner_backend peft \
   --dtype AUTO \
   --output_dir output \
-  --train_dataset_sample 60000 \
+  --train_dataset_sample -1 \
   --dataset_test_ratio 0 \
-  --max_steps 300 \
+  --max_steps -1 \
   --max_length 4096 \
   --check_dataset_strategy warning \
   --lora_rank 8 \
