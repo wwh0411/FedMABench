@@ -1,9 +1,10 @@
 import numpy as np
-import cv2
+
 import json
 from pathlib import Path
-import xml.etree.ElementTree as ET
-from xml.dom import minidom
+# import xml.etree.ElementTree as ET
+# from xml.dom import minidom
+# import cv2
 
 
 def imread_unicode(path):
@@ -23,6 +24,10 @@ def load_json(path):
 def dump_json(data, path):
     with open(path, 'w', encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=4)
+
+
+def merge_json(path1, path2, output_path):
+    dump_json(load_json(path1) + load_json(path2), output_path)
 
 
 def load_jsonl(path):

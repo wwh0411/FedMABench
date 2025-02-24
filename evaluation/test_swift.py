@@ -4,6 +4,7 @@ import json
 from eval_gpt import calculate_tfidf
 import argparse
 
+
 def read_jsonl(path):
     data = []
     with open(path, 'r', encoding='utf-8') as file:
@@ -27,7 +28,8 @@ def calculate_step_accuracy(data):
     step_accuracies = []
     for item in data:
         # 如果 label 和 response 相同，认为是相关的
-        step_accuracies.append(judge_step(item['label'], item['response']))
+        if item['label'] != 'Click at a button':
+            step_accuracies.append(judge_step(item['label'], item['response']))
 
     return step_accuracies
 
@@ -37,12 +39,23 @@ def calculate_episode_accuracy(data, step_accuracies=None):
     按照 query 对数据进行分组，然后计算每个 episode 的准确率。
     如果一个 episode 中所有行的 label 和 response 都相同，准确率为 1，否则为 0。
     """
+
+
     episode_accuracies = []
     episodes = {}
+    import re
+
 
     # 按照 query 对数据进行分组
     for item in data:
         query = item['query']
+        match = re.search(r'### User Instruction ###\n(.*?)\n###', query, re.DOTALL)
+
+        if match:
+            query = match.group(1).strip()  # 提取 User Instruction 部分并去除首尾空格
+            # print(user_instruction)
+        else:
+            print("No User Instruction found.")
         if query not in episodes:
             episodes[query] = []
         episodes[query].append(item)
@@ -78,6 +91,7 @@ def test_main(data_path):
     # 计算按 query 分组的 episode 准确率
     episode_accuracies = calculate_episode_accuracy(data)
     episode_accuracy = sum(episode_accuracies) / len(episode_accuracies)
+    print(f"len: {len(episode_accuracies)}")
     print(f"Episode-level accuracy: {episode_accuracy * 100:.2f}")
 
 

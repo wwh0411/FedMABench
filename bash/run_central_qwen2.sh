@@ -9,7 +9,7 @@ CUDA_VISIBLE_DEVICES=$2 MAX_PIXELS=602112 \
   --check_model_is_latest False \
   --lazy_tokenize True \
   --preprocess_num_proc 4 \
-  --dataset $2 \
+  --dataset $1 \
   --sft_type lora \
   --tuner_backend peft \
   --dtype AUTO \
@@ -32,5 +32,6 @@ CUDA_VISIBLE_DEVICES=$2 MAX_PIXELS=602112 \
   --eval_strategy no \
   --save_strategy no \
   --logging_steps 100
-
+#  --output_dir $3 \
+#  --add_output_dir_suffix False \
 #  --custom_train_dataset_path /GPFS/data/wenhaowang-1/ms-swift/androidcontrol_1108/unpack-1109-test-message-vlm-train.jsonl \

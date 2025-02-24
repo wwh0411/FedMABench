@@ -2,7 +2,8 @@ import json
 print(0)
 from utils.io import load_json, dump_json
 print(1)
-
+from template import *
+import argparse
 
 def complete_sub_ins_gt(data, reference_data):
     """
@@ -25,7 +26,50 @@ def complete_sub_ins_gt(data, reference_data):
     return completed_data
 
 
-def main():
+def get_low_prompt_from_high(resu_list, is_gt=False):
+
+    data_list = []
+    for index, entry in enumerate(resu_list):
+        acts = entry["acts"]
+        imgs = entry["imgs"]
+        for i in range(len(imgs)):
+            if is_gt:
+                query = template_train_ll.format(ins=entry['ins_gt'], sub_ins='')
+            else:
+                query = template_train_ll.format(ins=entry['ins_pre'], sub_ins='')
+            data_list.append({'query': query,
+                                     'response': acts[i],
+                                     'images': imgs[i]})
+    return data_list
+
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--model", type=str, default="qwen2-7b")
+    parser.add_argument("--lora_path", type=str, default=None)
+    parser.add_argument("--choice", type=int, default=0)
+    parser.add_argument("--sample", type=int, default=100)
+    parser.add_argument("--merge", action='store_true', default=False)
+    parser.add_argument("--debug", action='store_true', default=False)
+    args = parser.parse_args()
+    if 'get_low_prompt':
+
+        data_path = f'/ailab/user/wangwenhao/ms-swift/output/{args.model}/data_format/alg{args.choice}_train_{args.sample}_v1.json'
+        output_path = f'/ailab/user/wangwenhao/ms-swift/output/{args.model}/low_none/alg{args.choice}_train_{args.sample}_v1.json'
+
+        if args.choice == 0:
+            data_path = f'/ailab/user/wangwenhao/ms-swift/output/{args.model}/data_format/alg2_train_{args.sample}_v1.json'
+            output_path = f'/ailab/user/wangwenhao/ms-swift/output/{args.model}/low_none/gt_train_{args.sample}_v1.json'
+
+        def read_json(path):
+            with open(path, 'r', encoding="utf-8") as f:
+                data = json.load(f)
+            return data
+
+        data_list = get_low_prompt_from_high(read_json(data_path))
+        dump_json(data_list, output_path)
+        exit()
     # 文件路径
     original_file_path = '/ailab/user/wangwenhao/ms-swift/output/data_format/alg5_train_5000_v1.json'  # 需要补全的原始数据
     reference_file_path = '/ailab/user/wangwenhao/ms-swift/output/data_format/alg7_train_5000_v1.json'  # 参考数据，用于补全
@@ -38,7 +82,3 @@ def main():
     completed_data = complete_sub_ins_gt(original_data, reference_data)
 
     dump_json(completed_data, '/ailab/user/wangwenhao/ms-swift/output/data_format/alg5_train_5000_v1.json')
-
-
-if __name__ == "__main__":
-    main()

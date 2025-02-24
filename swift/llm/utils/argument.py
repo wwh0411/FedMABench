@@ -607,11 +607,14 @@ class ArgumentsBase:
 @dataclass
 class SftArguments(ArgumentsBase):
     # federated arguments added by wwh
-    fed_alg: Literal['local', 'central', 'fedavg', 'fedprox'] = 'fedavg'
+    fed_alg: Literal['local', 'central', 'fedavg', 'fedprox', 'local0', 'local1', 'local2',
+            'fedavgm', 'fedyogi', 'fedprox', 'avg-epi', 'ours', 'scaffold', 'fedadam', 'fedadagrad'] = 'fedavg'
     round: int = 100
     client_num: int = 10
     client_sample: int = 3
     round_per_epoch: int = 10
+    # means: Literal['avg', 'avgm', 'yogi', 'prox', 'avg-epi', 'ours','scaffold', 'adam','adagrad'] = 'avg'
+    ourmu: int = 7
     # You can specify the model by either using the model_type or model_id_or_path.
     model_type: Optional[str] = field(
         default=None, metadata={'help': f'model_type choices: {list(MODEL_MAPPING.keys())}'})

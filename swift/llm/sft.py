@@ -11,9 +11,10 @@ from packaging import version
 from transformers import BitsAndBytesConfig, GenerationConfig, IntervalStrategy
 from transformers.integrations import is_deepspeed_zero3_enabled
 from transformers.utils import is_torch_npu_available, strtobool
+from transformers import TrainerCallback
 
 from swift.torchacc_utils import patch_acc_model
-from swift.trainers import TrainerFactory
+from swift.trainers import TrainerFactory, Seq2SeqTrainer
 from swift.trainers.utils import can_return_loss, find_labels
 from swift.utils import (append_to_jsonl, check_json_format, compute_acc_metrics, compute_nlg_metrics, get_dist_setting,
                          get_logger, get_main, get_model_info, is_ddp_plus_mp, is_dist, is_master, plot_images,
@@ -26,7 +27,8 @@ from .utils import (TEMPLATE_MAPPING, LazyLLMDataset, PtArguments, RLHFArguments
 
 logger = get_logger()
 import logging
-logger.setLevel(logging.CRITICAL)
+
+# logger.setLevel(logging.CRITICAL)
 import sys
 import random
 from tqdm import tqdm
@@ -34,7 +36,93 @@ import copy
 import math
 from collections import defaultdict
 from peft import get_peft_model_state_dict, set_peft_model_state_dict
+
 sys.setrecursionlimit(10000)
+
+
+class TrainerFedProx(Seq2SeqTrainer):
+    def __init__(self, global_lora, prox_mu, **kwargs):
+        super(TrainerFedProx, self).__init__(**kwargs)
+        self.global_lora = global_lora
+        self.mu = prox_mu
+
+    def compute_loss(self, model, inputs, return_outputs=None, num_items_in_batch=None):
+
+        return_values = super(TrainerFedProx, self).compute_loss(model, inputs, return_outputs=None,
+                                                                 num_items_in_batch=None)
+
+        if return_outputs:
+            loss, outputs = return_values
+        else:
+            loss = return_values
+
+        # Apply FedProx Loss
+        for name, param in model.named_parameters():
+            name = name.replace(".default", "")  # TODO: May need changes. to accord with peft
+            # only trainable parameters
+            if not param.requires_grad:
+                continue
+            else:
+                loss += self.mu / 2 * torch.norm(param - self.global_lora[name]) ** 2
+
+        return (loss, outputs) if return_outputs else loss
+
+
+class TrainerSCAFFOLD(Seq2SeqTrainer):
+    def __init__(self, global_state, local_auxiliary, global_auxiliary, **kwargs):
+        super(TrainerSCAFFOLD, self).__init__(**kwargs)
+        self.global_state = global_state
+        self.local_auxiliary = local_auxiliary
+        self.global_auxiliary = global_auxiliary
+        self.correction = copy.deepcopy(local_auxiliary)
+
+        for name in self.correction.keys():
+            self.correction[name] = self.global_auxiliary[name] - self.local_auxiliary[name]
+
+    def get_auxiliary_param(self):
+        auxiliary_new_para = copy.deepcopy(self.local_auxiliary)
+        auxiliary_delta_para = copy.deepcopy(self.local_auxiliary)
+        with torch.no_grad():
+            for name, param in self.model.named_parameters():
+                if not param.requires_grad:
+                    continue
+                else:
+                    name = name.replace(".default", "")
+                    auxiliary_new_para[name] = (self.global_state[name] - param) / (
+                                self.args.max_steps * self.args.learning_rate) - self.correction[name]
+                    auxiliary_delta_para[name] = auxiliary_new_para[name] - self.local_auxiliary[name]
+        return auxiliary_new_para, auxiliary_delta_para
+
+
+class SCAFFOLD_Callback(TrainerCallback):
+    def __init__(self, correction, model):
+        super(SCAFFOLD_Callback, self).__init__()
+        self.correction = correction
+        self.model = model
+
+    def on_step_end(self, args, state, control, **kwargs):
+        model_para = copy.deepcopy(get_peft_model_state_dict(self.model))
+        for name in model_para.keys():
+            model_para[name] -= args.learning_rate * self.correction[name]
+        set_peft_model_state_dict(self.model, model_para)
+
+
+def get_auxiliary_dict(fed_args, global_dict):
+    if fed_args.fed_alg == 'scaffold':
+        global_auxiliary = {}  # c in SCAFFOLD
+        for key in global_dict.keys():
+            global_auxiliary[key] = torch.zeros_like(global_dict[key])
+        auxiliary_model_list = [copy.deepcopy(global_auxiliary) for _ in range(fed_args.client_num)]  # c_i in SCAFFOLD
+        auxiliary_delta_dict = [copy.deepcopy(global_auxiliary) for _ in
+                                range(fed_args.client_num)]  # delta c_i in SCAFFOLD
+
+    else:
+        global_auxiliary = None
+        auxiliary_model_list = [None] * fed_args.client_num
+        auxiliary_delta_dict = [None] * fed_args.client_num
+
+    return global_auxiliary, auxiliary_model_list, auxiliary_delta_dict
+
 
 def _get_train_val_dataset(args: SftArguments) -> Tuple[HfDataset, Optional[HfDataset]]:
     # Loading Dataset
@@ -150,7 +238,6 @@ def get_default_device_map():
 
 
 def prepare_model_template_train(args, msg: Optional[Dict[str, Any]] = None):
-
     if args.gpu_memory_fraction is not None:
         for device_id in range(torch.cuda.device_count()):
             torch.cuda.set_per_process_memory_fraction(max(min(args.gpu_memory_fraction, 1.0), 0.01), device=device_id)
@@ -332,7 +419,7 @@ def prepare_model_template_train(args, msg: Optional[Dict[str, Any]] = None):
     logger.info(f'system: {template.default_system}')
     logger.info(f'args.lazy_tokenize: {args.lazy_tokenize}')
 
-    if not isinstance(args, RLHFArguments): # sft ended here
+    if not isinstance(args, RLHFArguments):  # sft ended here
         return model, template, callbacks
 
     # ref_model
@@ -432,16 +519,20 @@ def prepare_dataset(args, template: Template, msg: Optional[Dict[str, Any]] = No
 
 
 def trainer_train(
-    args,
-    model,
-    template,
-    train_dataset,
-    val_dataset,
-    callbacks=None,
-    msg=None,
-    ref_model=None,
-    reward_model=None,
-    value_model=None,
+        args,
+        model,
+        template,
+        train_dataset,
+        val_dataset,
+        global_lora,
+        prox_mu=0.2,
+        local_auxiliary=None,
+        global_auxiliary=None,
+        callbacks=None,
+        msg=None,
+        ref_model=None,
+        reward_model=None,
+        value_model=None,
 ) -> Dict[str, Any]:
     if msg is None:
         msg = {}
@@ -480,15 +571,44 @@ def trainer_train(
     if args.train_type == 'ppo':
         trainer_kwargs['reward_model'] = reward_model
         trainer_kwargs['value_model'] = value_model
-    trainer = trainer_cls(
-        model=model,
-        args=training_args,
-        data_collator=data_collator,
-        train_dataset=train_dataset,
-        eval_dataset=val_dataset,
-        tokenizer=tokenizer,
-        callbacks=callbacks,
-        **trainer_kwargs)
+
+    if args.fed_alg == 'prox':
+        trainer = TrainerFedProx(
+            model=model,
+            args=training_args,
+            data_collator=data_collator,
+            train_dataset=train_dataset,
+            eval_dataset=val_dataset,
+            tokenizer=tokenizer,
+            callbacks=callbacks,
+            global_lora=global_lora,
+            prox_mu=prox_mu,
+            **trainer_kwargs)
+    elif args.fed_alg == 'scaffold':
+        trainer = TrainerSCAFFOLD(
+            model=model,
+            args=training_args,
+            data_collator=data_collator,
+            train_dataset=train_dataset,
+            eval_dataset=val_dataset,
+            tokenizer=tokenizer,
+            callbacks=callbacks,
+            global_state=global_lora,
+            local_auxiliary=local_auxiliary,
+            global_auxiliary=global_auxiliary,
+            **trainer_kwargs)
+        trainer.add_callback(SCAFFOLD_Callback(trainer.correction, model))
+
+    else:
+        trainer = trainer_cls(
+            model=model,
+            args=training_args,
+            data_collator=data_collator,
+            train_dataset=train_dataset,
+            eval_dataset=val_dataset,
+            tokenizer=tokenizer,
+            callbacks=callbacks,
+            **trainer_kwargs)
     trainer.is_multimodal = args.is_multimodal
     trainer.sft_args = args
     if use_torchacc():
@@ -505,8 +625,8 @@ def trainer_train(
     with template.training_context():
         trainer.train(training_args.resume_from_checkpoint)
     last_model_checkpoint = getattr(trainer.state, 'last_model_checkpoint', None)
-    logger.info(f'last_model_checkpoint: {last_model_checkpoint}')
-    logger.info(f'best_model_checkpoint: {trainer.state.best_model_checkpoint}')
+    # logger.info(f'last_model_checkpoint: {last_model_checkpoint}')
+    # logger.info(f'best_model_checkpoint: {trainer.state.best_model_checkpoint}')
     # Visualization
     if is_master() and not use_torchacc():
         if 'tensorboard' in training_args.report_to:
@@ -579,42 +699,21 @@ def split(dataset, num_clients):
     return result
 
 
-def aggregate_model(global_lora, local_lora_list, client_num_samples, clients_index_list):
-    total_data_points = sum([client_num_samples[r] for r in clients_index_list])
-    fed_avg_freqs = [client_num_samples[r] / total_data_points for r in clients_index_list]
-
-    # print(global_lora['base_model.model.model.layers.0.self_attn.q_proj.lora_A.weight'])
-    # params_dict_new = OrderedDict((name, param.detach()) for name, param in global_model.named_parameters() if 'default' in name)
-
-    global_lora_new = global_lora
-    for net_id, client_id in enumerate(clients_index_list):
-
-        net_para = local_lora_list[client_id]
-        # print(net_para['base_model.model.model.layers.1.self_attn.v_proj.lora_B.weight'])
-        if net_id == 0:
-            for key in net_para:
-                global_lora_new[key] = net_para[key] * fed_avg_freqs[net_id]
-        else:
-            for key in net_para:
-                global_lora_new[key] += net_para[key] * fed_avg_freqs[net_id]
-
-    return global_lora_new
-
-
 def get_clients_this_round(fed_alg, round, num_clients, num_clients_sample):
     if fed_alg.startswith('local'):
         try:
             clients_this_round = [int((fed_alg)[-1])]
         except:
             clients_this_round = [0]
-    elif fed_alg in ['fedavg']:
+    elif fed_alg in ['central']:
+        clients_this_round = [0]
+
+    else:
         if num_clients < num_clients_sample:
             clients_this_round = list(range(num_clients))
         else:
             random.seed(round)
             clients_this_round = sorted(random.sample(range(num_clients), num_clients_sample))
-    else:
-        clients_this_round = [0]
     return clients_this_round
 
 
@@ -627,6 +726,21 @@ def group_by_client_number(data):
     for idx, item in enumerate(data):
         client_number = item["client_id"]
         result[client_number].append(idx)
+
+    # 将结果按 client_number 排序并转化为列表形式
+    return [result[i] for i in sorted(result.keys())]
+
+
+def group_by_client_number_2(data):
+    # 使用 defaultdict 来存储每个 client_number 对应的索引列表
+    # 使用 defaultdict 来存储每个 client_number 对应的索引集合
+    result = defaultdict(set)
+
+    # 遍历列表，获取每个元素的索引及其 client_number
+    for idx, item in enumerate(data):
+        client_number = item["client_id"]
+        query = item["query"]
+        result[client_number].add(query)  # 使用 add 而不是 append，set 会自动去重
 
     # 将结果按 client_number 排序并转化为列表形式
     return [result[i] for i in sorted(result.keys())]
@@ -647,9 +761,26 @@ def get_dataset_this_round(dataset, round, indice, args):
     return dataset_this_round
 
 
-# federated learning added by wwh
+def aggregate_model(global_lora, local_lora_list, client_num_samples, clients_index_list):
+    total_data_points = sum([client_num_samples[r] for r in clients_index_list])
+    fed_avg_freqs = [client_num_samples[r] / total_data_points for r in clients_index_list]
+
+    # 初始化global_lora_new
+    global_lora_new = global_lora
+    for net_id, client_id in enumerate(clients_index_list):
+        net_para = local_lora_list[client_id]
+        # 使用加权平均来聚合
+        if net_id == 0:
+            for key in net_para:
+                global_lora_new[key] = net_para[key] * fed_avg_freqs[net_id]
+        else:
+            for key in net_para:
+                global_lora_new[key] += net_para[key] * fed_avg_freqs[net_id]
+
+    return global_lora_new
+
+
 def llm_sft(args: SftArguments) -> None:
-    # logger.info(f'args: {args}')
     seed_everything(args.seed)
 
     is_generation = TEMPLATE_MAPPING[args.template_type].get('is_generation', False)
@@ -662,17 +793,21 @@ def llm_sft(args: SftArguments) -> None:
 
     if args.train_backend == 'megatron':
         return llm_sft_megatron(args)
+
     msg = {}
     model, template, callbacks = prepare_model_template_train(args, msg)
-    # lora param list
     lora_w = get_peft_model_state_dict(model)
     global_lora = copy.deepcopy(lora_w)
 
     local_lora_list = [copy.deepcopy(lora_w) for _ in range(args.client_num)]
+    global_auxiliary, auxiliary_model_list, auxiliary_delta_dict = get_auxiliary_dict(args, global_lora)
+    print('len auxiliary_model_list:', len(auxiliary_model_list))
+
     train_dataset, val_dataset = prepare_dataset(args, template, msg)
 
-    # get client splits
+    # Get client splits
     indices = list(range(len(train_dataset)))
+
     def read_json(path):
         with open(path, 'r', encoding="utf-8") as f:
             data = json.load(f)
@@ -684,40 +819,132 @@ def llm_sft(args: SftArguments) -> None:
         dataset_path, dataset_sample = args.dataset[0], len(train_dataset)
     print(dataset_path, dataset_sample)
     data = read_json(dataset_path)[:int(dataset_sample)]
+
     if 'client_id' in data[0].keys() and args.fed_alg != 'central':
         splits = group_by_client_number(data)
     else:
         splits = split(data, args.client_num)
-    client_num_samples = [len(x) for x in splits]
+
+    if args.fed_alg == 'avg-epi':
+        splits2 = group_by_client_number_2(data)
+        client_num_samples = [len(x) for x in splits2]
+    elif args.fed_alg == 'ours':
+        client_num_sample1 = [len(x) for x in splits]
+        splits2 = group_by_client_number_2(data)
+        client_num_samples2 = [len(x) for x in splits2]
+        client_num_samples = [client_num_sample1[i] + args.ourmu * client_num_samples2[i] for i in
+                              range(args.client_num)]
+    else:
+        client_num_samples = [len(x) for x in splits]
     print(client_num_samples)
 
-    # training
+
+
+    # Training Loop
     for i in range(args.round):
         online_clients = get_clients_this_round(args.fed_alg, i, args.client_num, args.client_sample)
         print('round:', i, online_clients)
-        # local train for each client
 
+        previous_global_lora = copy.deepcopy(global_lora)
+
+        # Local train for each client
         for j in online_clients:
             print('client:', j)
             train_dataset_j = get_dataset_this_round(train_dataset, i, splits[j], args)
             train_dataset_j = LazyLLMDataset(train_dataset_j, template.encode)
             print(len(train_dataset_j))
             local_lora = local_lora_list[j]
-            # two options
-            # local_model = set_peft_model_state_dict(model, local_lora)
             set_peft_model_state_dict(model, global_lora)
-            trainer_train(args, model, template, train_dataset_j, val_dataset, callbacks=callbacks, msg=msg)
-            # torch.cuda.empty_cache()
-            local_lora_after = copy.deepcopy(get_peft_model_state_dict(model)) # copy is necessary
+
+            print('len auxiliary_model_list2:', len(auxiliary_model_list))
+            trainer_train(args, model, template, train_dataset_j, val_dataset, global_lora,
+                          local_auxiliary=auxiliary_model_list[j], global_auxiliary=global_auxiliary,
+                          callbacks=callbacks, msg=msg)
+            local_lora_after = copy.deepcopy(get_peft_model_state_dict(model))  # Copy is necessary
             local_lora_list[j] = local_lora_after
 
-        global_lora = aggregate_model(global_lora, local_lora_list, client_num_samples, online_clients)
-        # print(global_lora['base_model.model.model.layers.27.mlp.down_proj.lora_A.weight'][num].tolist()[:5])
+        if args.fed_alg == 'fedadam':
+            # FedYogi Update
+            global_lora_new = aggregate_model(global_lora, local_lora_list, client_num_samples, online_clients)
+            # Initialize proxy dicts for momentum and variance
+            proxy_dict = {key: torch.zeros_like(value) for key, value in global_lora.items()}
+            opt_proxy_dict = {key: torch.zeros_like(value) for key, value in global_lora.items()}
+
+            # FedYogi Update
+            fedopt_beta1 = 0.9
+            fedopt_beta2 = 0.999
+            fedopt_eta = 1e-3
+            fedopt_tau = 1e-6
+            for key in global_lora_new:
+                delta_w = global_lora_new[key] - previous_global_lora[key]
+                print(delta_w)
+                proxy_dict[key] = fedopt_beta1 * proxy_dict[key] + (1 - fedopt_beta1) * delta_w if i > 0 else delta_w
+                opt_proxy_dict[key] = fedopt_beta2 * opt_proxy_dict[key] + (1 - fedopt_beta2) * torch.square(
+                    proxy_dict[key])
+                global_lora[key] += fedopt_eta * torch.div(proxy_dict[key],
+                                                           torch.sqrt(opt_proxy_dict[key]) + fedopt_tau)
+        elif args.fed_alg == 'adagrad':
+            # FedYogi Update
+            global_lora_new = aggregate_model(global_lora, local_lora_list, client_num_samples, online_clients)
+            # Initialize proxy dicts for momentum and variance
+            proxy_dict = {key: torch.zeros_like(value) for key, value in global_lora.items()}
+            opt_proxy_dict = {key: torch.zeros_like(value) for key, value in global_lora.items()}
+
+            # FedYogi Update
+            fedopt_beta1 = 0.9
+            fedopt_beta2 = 0.999
+            fedopt_eta = 1e-3
+            fedopt_tau = 1e-6
+            for key in global_lora_new:
+                delta_w = global_lora_new[key] - previous_global_lora[key]
+                proxy_dict[key] = delta_w
+                opt_proxy_dict[key] = opt_proxy_dict[key] + torch.square(proxy_dict[key])
+                global_lora[key] += fedopt_eta * torch.div(proxy_dict[key],
+                                                           torch.sqrt(opt_proxy_dict[key]) + fedopt_tau)
+        elif args.fed_alg == 'fedyogi':
+            # FedYogi Update
+            global_lora_new = aggregate_model(global_lora, local_lora_list, client_num_samples, online_clients)
+            # Initialize proxy dicts for momentum and variance
+            proxy_dict = {key: torch.zeros_like(value) for key, value in global_lora.items()}
+            opt_proxy_dict = {key: torch.zeros_like(value) for key, value in global_lora.items()}
+
+            # FedYogi Update
+            fedopt_beta1 = 0.9
+            fedopt_beta2 = 0.999
+            fedopt_eta = 1e-3
+            fedopt_tau = 1e-6
+            for key in global_lora_new:
+                delta_w = global_lora_new[key] - previous_global_lora[key]
+                proxy_dict[key] = fedopt_beta1 * proxy_dict[key] + (1 - fedopt_beta1) * delta_w if i > 0 else delta_w
+                delta_square = torch.square(proxy_dict[key])
+                opt_proxy_dict[key] = opt_proxy_dict[key] - (1 - fedopt_beta2) * delta_square * torch.sign(
+                    proxy_dict[key] - delta_square)
+                global_lora[key] += fedopt_eta * torch.div(proxy_dict[key],
+                                                           torch.sqrt(opt_proxy_dict[key]) + fedopt_tau)
+
+        elif args.fed_alg == 'fedavgm':
+            # Federated Averaging with Momentum
+            global_lora_new = aggregate_model(previous_global_lora, local_lora_list, client_num_samples, online_clients)
+            global_lora = {key: 0.9 * previous_global_lora[key] + 0.1 * global_lora_new[key] for key in global_lora_new}
+            # previous_global_lora = copy.deepcopy(global_lora)
+        else:
+            # Standard Federated Averaging
+            global_lora = aggregate_model(global_lora, local_lora_list, client_num_samples, online_clients)
+
+        if args.fed_alg == 'scaffold':
+
+            auxiliary_info = (global_auxiliary, auxiliary_delta_dict)
+            global_auxiliary, auxiliary_delta_dict = auxiliary_info
+            for key in global_auxiliary.keys():
+                delta_auxiliary = sum([auxiliary_delta_dict[client][key] for client in online_clients])
+                global_auxiliary[key] += delta_auxiliary / args.client_num
+
         set_peft_model_state_dict(model, global_lora)
         torch.cuda.empty_cache()
-        # torch.save(global_lora, self.save_dir + '/global_lora_{}.bin'.format(round))
+
+        # Save model every 5 rounds
         if (i + 1) % 5 == 0:
-            model.save_pretrained(args.output_dir + '/global_lora_{}'.format(i+1))
+            model.save_pretrained(args.output_dir + '/global_lora_{}'.format(i + 1))
 
     return
 

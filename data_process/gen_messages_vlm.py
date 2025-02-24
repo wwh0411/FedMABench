@@ -247,6 +247,7 @@ def main():
     parser = argparse.ArgumentParser(description="Process some episodes.")
     # 设置默认目录路径
     default_data_dir = "/ailab/user/wangwenhao/ms-swift/androidcontrol_1108/unpack-androidcontrol"
+    default_data_dir = "/ailab/user/wangwenhao/ms-swift_old/androidcontrol_1108/unpack-androidcontrol"
     parser.add_argument(
         '--data_dir', 
         type=str, 
@@ -260,7 +261,7 @@ def main():
     data_dir = Path(args.data_dir)
     # split = load_json('/remote-home/iot_liuguangyi/data/AndroidControl/splits.json')
 
-    process_episodes(data_dir, [i for i in range(30000)], args.choice)
+    process_episodes(data_dir, [i for i in range(30000)][5000:8000], args.choice)
 
 if __name__ == '__main__':
     main()

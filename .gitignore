@@ -155,3 +155,5 @@ resources/
 .dev_scripts/
 tmp/
 data_process/output/
+data_process/output_cmic/
+bash/output/

@@ -94,25 +94,67 @@ def extract_ins(query):
         print(ins)
 
 
-def eval_main(path, method):
-    ins_list = load_json(path)
-    gt_list = load_json('/ailab/user/wangwenhao/ms-swift/output/high/gt_train_5000_v1.json')
+def eval_main(path, method, level='high'):
+    resu_list = load_json(path)
+    # gt_list = load_json('/ailab/user/wangwenhao/ms-swift/output/high/gt_train_5000_v1.json')
     sim_list = []
-    for ins, gt_ins in tqdm(zip(ins_list, gt_list)):
-        ins['pre'] = extract_ins(ins['query'])
-        ins['gt'] = extract_ins(gt_ins['query'])
+    for entry in tqdm(resu_list):
+        if level == 'high':
+            ins_pre = entry['ins_pre']
+            ins_gt = entry['ins_gt']
 
-        if method == 'tfidf':
-            sim = calculate_tfidf(ins['pre'], ins['gt'])
-        elif method == 'embed':
-            sim = calculate_embed_similarity(ins['pre'], ins['gt'])
-        elif method == 'bleu':
-            sim = calculate_bleu(ins['gt'], ins['pre'])
-        elif method == 'rouge':
-            sim = calculate_rouge(ins['gt'], ins['pre'])
-        sim_list.append(sim)
+            if method == 'tfidf':
+                sim = calculate_tfidf(ins_pre, ins_gt)
+            elif method == 'embed':
+                sim = calculate_embed_similarity(ins_pre, ins_gt)
+            elif method == 'bleu':
+                sim = calculate_bleu(ins_gt, ins_pre)
+            elif method == 'rouge':
+                sim = calculate_rouge(ins_gt, ins_pre)
+            else:
+                raise NotImplementedError
+            sim_list.append(sim)
+        else:
+            sub_ins_gt = entry['sub_ins_gt']
+            sub_ins_pre = entry['des_acts']
+            if not sub_ins_pre:
+                return 0
+            sim_sub_list = []
+            if not sub_ins_pre:
+                sim_list.append(0)
+            for ins_pre, ins_gt in zip(sub_ins_pre, sub_ins_gt):
+                if method == 'tfidf':
+                    sim = calculate_tfidf(ins_pre, ins_gt)
+                elif method == 'embed':
+                    sim = calculate_embed_similarity(ins_pre, ins_gt)
+                elif method == 'bleu':
+                    sim = calculate_bleu(ins_gt, ins_pre)
+                elif method == 'rouge':
+                    sim = calculate_rouge(ins_gt, ins_pre)
+                else:
+                    raise NotImplementedError
+                sim_sub_list.append(sim)
+            sim_list.append(sum(sim_sub_list) / len(sim_sub_list))
 
     print(method, 'avg:', sum(sim_list) / len(sim_list))
+    return sim_list
+
+
+def get_relation_hl_ll(sim_list_hl, sim_list_ll):
+    import matplotlib.pyplot as plt
+
+    # 示例数据
+
+
+    # 创建散点图
+    plt.scatter(sim_list_hl, sim_list_ll)
+
+    # 添加标题和标签
+    plt.title('散点图示例')
+    plt.xlabel('列表 A')
+    plt.ylabel('列表 B')
+
+    plt.savefig('scatter_plot.png', dpi=300)
 
 
 if __name__ == '__main__':
@@ -127,9 +169,14 @@ if __name__ == '__main__':
     )
     parser.add_argument('--choice', type=str, default='all')
     args = parser.parse_args()
+
     if args.choice == 'all':
         for method in ['tfidf', 'rouge', 'bleu']:
             print(method)
-            eval_main(args.data_path, method)
+            sim_list_hl = eval_main(args.data_path, method, 'high')
+            sim_list_ll = eval_main(args.data_path, method, 'low')
+            # get_relation_hl_ll(sim_list_hl, sim_list_ll)
     else:
-        eval_main(args.data_path, args.choice)
+        sim_list_hl = eval_main(args.data_path, args.choice, 'high')
+        sim_list_ll = eval_main(args.data_path, args.choice, 'low')
+        # get_relation_hl_ll(sim_list_hl, sim_list_ll)

@@ -131,7 +131,7 @@ def merge_lora(args: InferArguments,
             sft_args_kwargs={'dtype': args.dtype})
         logger.info(f'Successfully merged LoRA and saved in {merged_lora_path}.')
     logger.info("Setting args.sft_type: 'full'")
-    logger.info(f'Setting args.ckpt_dir: {merged_lora_path}')
+    # logger.info(f'Setting args.ckpt_dir: {merged_lora_path}')
     args.sft_type = 'full'
     args.ckpt_dir = merged_lora_path
     return merged_lora_path
@@ -205,7 +205,7 @@ def prepare_model_template(args: InferArguments,
             raise ValueError('args.max_model_len exceeds the maximum max_model_len supported by the model.'
                              f'args.max_model_len: {args.max_model_len}, model.max_model_len: {model.max_model_len}')
     if task == 'infer':
-        logger.info(f'model_config: {model.config}')
+        # logger.info(f'model_config: {model.config}')
         generation_config = GenerationConfig(
             max_new_tokens=args.max_new_tokens,
             temperature=args.temperature,
@@ -218,11 +218,11 @@ def prepare_model_template(args: InferArguments,
             eos_token_id=tokenizer.eos_token_id)
         model._generation_config_origin = model.generation_config
         set_generation_config(model, generation_config)
-        logger.info(f'model.generation_config: {model.generation_config}')
+        # logger.info(f'model.generation_config: {model.generation_config}')
 
         if model.generation_config.num_beams != 1:
             args.stream = False
-            logger.info('Setting args.stream: False')
+            # logger.info('Setting args.stream: False')
 
     # Preparing LoRA
     if is_adapter(args.sft_type) and args.ckpt_dir is not None:
@@ -237,10 +237,10 @@ def prepare_model_template(args: InferArguments,
         model = model.to(model.dtype)
     model.requires_grad_(False)
 
-    if task == 'infer':
-        show_layers(model)
-        logger.info(model)
-    logger.info(get_model_info(model))
+    # if task == 'infer':
+    #     show_layers(model)
+    #     logger.info(model)
+    # logger.info(get_model_info(model))
     template: Template = get_template(
         args.template_type,
         tokenizer,
@@ -249,7 +249,7 @@ def prepare_model_template(args: InferArguments,
         args.truncation_strategy,
         model=model,
         tools_prompt=args.tools_prompt)
-    logger.info(f'system: {template.default_system}')
+    # logger.info(f'system: {template.default_system}')
     return model, template
 
 
@@ -281,7 +281,7 @@ def read_media_file(infer_kwargs: Dict[str, Any], infer_media_type: Literal['non
 
 
 def llm_infer(args: InferArguments) -> Dict[str, List[Dict[str, Any]]]:
-    logger.info(f'args: {args}')
+    # logger.info(f'args: {args}')
     seed_everything(args.seed)
     if args.merge_lora:
         merge_lora(args, device_map=args.merge_device_map)
@@ -458,19 +458,19 @@ def llm_infer(args: InferArguments) -> Dict[str, List[Dict[str, Any]]]:
         assert val_dataset is not None
         if 0 <= args.show_dataset_sample < val_dataset.shape[0]:
             random_state = np.random.RandomState(args.dataset_seed)
-            logger.info(f'show_dataset_sample: {args.show_dataset_sample}')
+            # logger.info(f'show_dataset_sample: {args.show_dataset_sample}')
             val_dataset = sample_dataset(val_dataset, args.show_dataset_sample, random_state)
-        logger.info(f'val_dataset: {val_dataset}')
+        # logger.info(f'val_dataset: {val_dataset}')
 
         if args.verbose is None:
             if len(val_dataset) >= 20:
                 args.verbose = False
             else:
                 args.verbose = True
-            logger.info(f'Setting args.verbose: {args.verbose}')
+            # logger.info(f'Setting args.verbose: {args.verbose}')
         if not args.verbose and args.stream:
             args.stream = False
-            logger.info(f'Setting args.stream: {args.stream}')
+            # logger.info(f'Setting args.stream: {args.stream}')
 
         if args.infer_backend in {'vllm', 'lmdeploy'} and not args.stream:
             if args.verbose:
