@@ -1,15 +1,17 @@
 #!/bin/bash
 
 base_path=/ailab/user/wangwenhao/FedMobile/bash/output
-model=internvl2-1b
-model_id_or_path=/ailab/user/wangwenhao/.cache/modelscope/hub/OpenGVLab/InternVL2-1B
+#model=internvl2-1b
+#model_id_or_path=/ailab/user/wangwenhao/.cache/modelscope/hub/OpenGVLab/InternVL2-1B
 #model=internvl2-8b
+model=qwen2-vl-7b-instruct
+model_id_or_path=/ailab/user/wangwenhao/.cache/modelscope/hub/qwen/Qwen2-VL-7B-Instruct
 #model_id_or_path=/ailab/user/wangwenhao/.cache/modelscope/hub/OpenGVLab/InternVL2-8B
 round=10
 val_dataset=/ailab/user/wangwenhao/ms-swift/c5_n100_val_apphete.jsonl
 #val_dataset=/ailab/user/wangwenhao/ms-swift/c5_n100_val2_random.jsonl
 peft_list=(
-v11-20250221-183012
+#v11-20250221-183012
 #v61-20250221-183012
 #v0-20250221-183012
 #v111-20250111-192005
@@ -49,7 +51,7 @@ v11-20250221-183012
 #v199-20250208-002248
 #v200-20250208-002803
 #v201-20250208-003735
-#v202-20250208-003820
+v202-20250208-003820
 #v203-20250208-003919
 #v204-20250208-003950
 #v205-20250208-172014
@@ -110,7 +112,7 @@ do
     # Process each jsonl file here
     echo $jsonl_file
 #    cd evaluation
-    python test_swift_app.py --data_path "$jsonl_file" --category_file /ailab/user/wangwenhao/ms-swift/val_app_hete.json
+    python test_swift_cate.py --data_path "$jsonl_file" --category_file /ailab/user/wangwenhao/ms-swift/val_cate_hete.json
     done
 
 

@@ -802,6 +802,9 @@ def llm_sft(args: SftArguments) -> None:
     local_lora_list = [copy.deepcopy(lora_w) for _ in range(args.client_num)]
     global_auxiliary, auxiliary_model_list, auxiliary_delta_dict = get_auxiliary_dict(args, global_lora)
     print('len auxiliary_model_list:', len(auxiliary_model_list))
+    fedopt_tau = 1e-6
+    proxy_dict = {key: torch.zeros_like(value) for key, value in global_lora.items()}
+    opt_proxy_dict = {key: torch.ones_like(value)*fedopt_tau**2 for key, value in global_lora.items()}
 
     train_dataset, val_dataset = prepare_dataset(args, template, msg)
 
@@ -866,15 +869,12 @@ def llm_sft(args: SftArguments) -> None:
         if args.fed_alg == 'fedadam':
             # FedYogi Update
             global_lora_new = aggregate_model(global_lora, local_lora_list, client_num_samples, online_clients)
-            # Initialize proxy dicts for momentum and variance
-            proxy_dict = {key: torch.zeros_like(value) for key, value in global_lora.items()}
-            opt_proxy_dict = {key: torch.zeros_like(value) for key, value in global_lora.items()}
 
             # FedYogi Update
             fedopt_beta1 = 0.9
             fedopt_beta2 = 0.999
             fedopt_eta = 1e-3
-            fedopt_tau = 1e-6
+            # fedopt_tau = 1e-6
             for key in global_lora_new:
                 delta_w = global_lora_new[key] - previous_global_lora[key]
                 print(delta_w)
@@ -887,14 +887,14 @@ def llm_sft(args: SftArguments) -> None:
             # FedYogi Update
             global_lora_new = aggregate_model(global_lora, local_lora_list, client_num_samples, online_clients)
             # Initialize proxy dicts for momentum and variance
-            proxy_dict = {key: torch.zeros_like(value) for key, value in global_lora.items()}
-            opt_proxy_dict = {key: torch.zeros_like(value) for key, value in global_lora.items()}
+            # proxy_dict = {key: torch.zeros_like(value) for key, value in global_lora.items()}
+            # opt_proxy_dict = {key: torch.zeros_like(value) for key, value in global_lora.items()}
 
             # FedYogi Update
             fedopt_beta1 = 0.9
             fedopt_beta2 = 0.999
             fedopt_eta = 1e-3
-            fedopt_tau = 1e-6
+            # fedopt_tau = 1e-6
             for key in global_lora_new:
                 delta_w = global_lora_new[key] - previous_global_lora[key]
                 proxy_dict[key] = delta_w
@@ -905,14 +905,14 @@ def llm_sft(args: SftArguments) -> None:
             # FedYogi Update
             global_lora_new = aggregate_model(global_lora, local_lora_list, client_num_samples, online_clients)
             # Initialize proxy dicts for momentum and variance
-            proxy_dict = {key: torch.zeros_like(value) for key, value in global_lora.items()}
-            opt_proxy_dict = {key: torch.zeros_like(value) for key, value in global_lora.items()}
+            # proxy_dict = {key: torch.zeros_like(value) for key, value in global_lora.items()}
+            # opt_proxy_dict = {key: torch.zeros_like(value) for key, value in global_lora.items()}
 
             # FedYogi Update
             fedopt_beta1 = 0.9
             fedopt_beta2 = 0.999
             fedopt_eta = 1e-3
-            fedopt_tau = 1e-6
+            # fedopt_tau = 1e-6
             for key in global_lora_new:
                 delta_w = global_lora_new[key] - previous_global_lora[key]
                 proxy_dict[key] = fedopt_beta1 * proxy_dict[key] + (1 - fedopt_beta1) * delta_w if i > 0 else delta_w
