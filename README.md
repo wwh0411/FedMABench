@@ -178,6 +178,14 @@ Other variables like `CUDA_VISIBLE_DEVICES` are also supported, which are not li
 ## 📎 Citation
 
 ```bibtex
-
+@misc{wang2025fedmabenchbenchmarkingmobileagents,
+      title={FedMABench: Benchmarking Mobile Agents on Decentralized Heterogeneous User Data}, 
+      author={Wenhao Wang and Zijie Yu and Rui Ye and Jianqing Zhang and Siheng Chen and Yanfeng Wang},
+      year={2025},
+      eprint={2503.05143},
+      archivePrefix={arXiv},
+      primaryClass={cs.AI},
+      url={https://arxiv.org/abs/2503.05143}, 
+}
 ```
 
