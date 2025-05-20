@@ -19,7 +19,7 @@ This benchmark is based upon [ms-swift](https://github.com/modelscope/ms-swift/)
 We thank the authors for their valuable contributions!
 
 ## 📱 Datasets
-The datasets of FedMABench are public available at HuggingFace: [wwh0411/FedMABench](https://huggingface.co/datasets/wwh0411/FedMABench).
+The datasets of FedMABench are public available at HuggingFace:
 
 ## 🛠️ Installation
 
