@@ -1,13 +1,11 @@
 #!/bin/bash
 
-base_path=/ailab/user/wangwenhao/FedMobile/bash/output
+base_path=./output
 model=qwen2-vl-7b-instruct
-model_id_or_path=/ailab/user/wangwenhao/.cache/modelscope/hub/qwen/Qwen2-VL-7B-Instruct
+model_id_or_path=qwen/Qwen2-VL-7B-Instruct
 #model=internvl2-8b
-#model_id_or_path=/ailab/user/wangwenhao/.cache/modelscope/hub/OpenGVLab/InternVL2-8B
 round=10
-#val_dataset=/ailab/user/wangwenhao/ms-swift/c5_n100_val_apphete.jsonl
-val_dataset=/ailab/user/wangwenhao/ms-swift/ablation/c10_n100_val_random_x0.jsonl
+val_dataset=c10_n100_val_random_x0.jsonl
 peft_list=(
 #v250-20250214-133139
 #v251-20250214-133250

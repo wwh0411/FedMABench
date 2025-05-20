@@ -73,7 +73,6 @@ def calculate_episode_accuracy(data, step_accuracies=None):
 
 def test_main(data_path):
     # 读取数据
-    # data_path = r'/ailab/user/wangwenhao/FedMobile/output/qwen2-vl-7b-instruct/v7-20241219-094924/global_lora_49/infer_result/20241220-001128.jsonl'
     data = read_jsonl(data_path)
     
     # 获取数据所在目录和文件名

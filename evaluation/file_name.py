@@ -2,8 +2,8 @@ import os
 import re
 import json
 # 设置文件夹路径
-folder_path = r'/ailab/user/wangwenhao/FedMobile/bash/output/qwen2-vl-7b-instruct'
-# folder_path = r'/ailab/user/wangwenhao/FedMobile/bash/output/internvl2-2b'
+folder_path = r'FedMobile/bash/output/qwen2-vl-7b-instruct'
+
 
 
 # 获取文件夹中的所有子文件夹（目录）

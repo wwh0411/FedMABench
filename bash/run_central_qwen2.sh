@@ -5,7 +5,7 @@ CUDA_VISIBLE_DEVICES=$2 MAX_PIXELS=602112 \
   --fed_alg central \
   --client_num 1 \
   --model_type qwen2-vl-7b-instruct \
-  --model_id_or_path /ailab/user/wangwenhao/.cache/modelscope/hub/qwen/Qwen2-VL-7B-Instruct \
+  --model_id_or_path qwen/Qwen2-VL-7B-Instruct \
   --check_model_is_latest False \
   --lazy_tokenize True \
   --preprocess_num_proc 4 \
@@ -34,4 +34,3 @@ CUDA_VISIBLE_DEVICES=$2 MAX_PIXELS=602112 \
   --logging_steps 100
 #  --output_dir $3 \
 #  --add_output_dir_suffix False \
-#  --custom_train_dataset_path /GPFS/data/wenhaowang-1/ms-swift/androidcontrol_1108/unpack-1109-test-message-vlm-train.jsonl \

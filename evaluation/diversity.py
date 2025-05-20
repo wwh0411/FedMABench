@@ -8,14 +8,13 @@ import os
 models = ["all-MiniLM-L6-v2", "paraphrase-MiniLM-L6-v2", "all-mpnet-base-v2", "stsbroberta-base-v2",
                     "distilbert-base-nli-stsb-meantokens"]
 model = SentenceTransformer(models[1])
-# model = SentenceTransformer('all-MiniLM-L6-v2', cache_folder='/ailab/user/wangwenhao/FedMobile/evaluation/all-MiniLM-L6-v2')  # 选择一个预训练模型，你也可以选择其他模型
 print(model)
 def read_json(path):
     with open(path, 'r', encoding="utf-8") as f:
         data = json.load(f)
     return data
 # 假设你的指令列表是这样的
-path = '/ailab/user/wangwenhao/ms-swift/output/gpt-4o-mini/data_format/alg3_train_1000_v1.json'
+path = 'alg3_train_1000_v1.json'
 json_data = read_json(path)
 
 instructions = [x['ins_pre'] for x in json_data]

@@ -78,7 +78,7 @@ def test_main(data_path, category_file):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--data_path", type=str, required=True, help="Path to the JSONL data file")
-    parser.add_argument("--category_file", type=str, default='/ailab/user/wangwenhao/ms-swift/val_cate_hete.json', help="Path to the category mapping JSON file")
+    parser.add_argument("--category_file", type=str, default='', help="Path to the category mapping JSON file")
 
     args = parser.parse_args()
 

@@ -61,8 +61,8 @@ def bert_encode(texts, model, tokenizer):
 
 def calculate_embed_similarity(sentence1, sentence2):
     # 加载预训练的BERT模型和分词器
-    tokenizer = AutoTokenizer.from_pretrained('/ailab/user/wangwenhao/hf_models/jinaai/jina-embeddings-v3', trust_remote_code=True)
-    model = AutoModel.from_pretrained('/ailab/user/wangwenhao/hf_models/jinaai/jina-embeddings-v3', trust_remote_code=True, device_map='cuda')
+    tokenizer = AutoTokenizer.from_pretrained('jinaai/jina-embeddings-v3', trust_remote_code=True)
+    model = AutoModel.from_pretrained('jinaai/jina-embeddings-v3', trust_remote_code=True, device_map='cuda')
 
     # 编码句子
     # embeddings = bert_encode([sentence1, sentence2], model, tokenizer)
@@ -96,7 +96,6 @@ def extract_ins(query):
 
 def eval_main(path, method, level='high'):
     resu_list = load_json(path)
-    # gt_list = load_json('/ailab/user/wangwenhao/ms-swift/output/high/gt_train_5000_v1.json')
     sim_list = []
     for entry in tqdm(resu_list):
         if level == 'high':
