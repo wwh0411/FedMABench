@@ -1,5 +1,7 @@
 # FedMABench: Benchmarking Mobile Agents on Decentralized Heterogeneous User Data
 
+## 🎉 News 
+We are happy to share that FedMABench is accepted to EMNLP 2025 main conference, oral !
 
 ## 📝 Introduction
 **FedMABench** is an open-source benchmark for federated training and evaluation of *mobile agents*, specifically designed for heterogeneous scenarios. 
@@ -20,6 +22,18 @@ We thank the authors for their valuable contributions!
 
 ## 📱 Datasets
 The datasets of FedMABench are public available at HuggingFace: [wwh0411/FedMABench](https://huggingface.co/datasets/wwh0411/FedMABench).
+For downloading the image files, due to the large file size, its very inconvenient to upload the full unpacked images.
+For reproducibility, we update our code for unpacking from the original image source 
+
+Due to the large size of the image data, we do not directly provide the unpacked image files. Instead, for reproducibility, our code supports unpacking the images from their original sources — AndroidControl and AitW.
+
+1. Download the TFRecord files from the corresponding Google Drive links: [AndroidControl](https://console.cloud.google.com/storage/browser/gresearch/android_control) and [AitW](https://console.cloud.google.com/storage/browser/gresearch/android-in-the-wild).
+2. Modify the file path in the Python script under the directory `data_process/`.
+3. Run the following command:
+```
+python data_process/1_dump_ac.py
+python data_process/2_gen_jsonl_from_unpack_ac.py
+```
 
 ## 🛠️ Installation
 
